@@ -1,0 +1,16 @@
+name: Keep Backends Alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-backends:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend
+        run: |
+          echo "Pinging Render..."
+          curl -f -s "https://nexusedu-backend-0bjq.onrender.com/api/health" \
+            && echo "Render: OK" || echo "Render: DOWN"
