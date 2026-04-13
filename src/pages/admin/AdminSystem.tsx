@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useCatalog } from '../../contexts/CatalogContext';
 import { useToast } from '../../components/ui/Toast';
-import { Activity, RefreshCw, Zap, Bug, Database, Settings as SettingsIcon, ShieldAlert, CheckCircle, XCircle } from 'lucide-react';
+import { Activity, RefreshCw, Zap, Bug, Database, Settings as SettingsIcon, ShieldAlert, CheckCircle, XCircle, Key } from 'lucide-react';
 import { getWorkingBackend, api } from '../../lib/api';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { supabase } from '../../lib/supabase';
+import { Link } from 'react-router-dom';
 
 interface HealthData {
   status: string;
@@ -333,6 +334,23 @@ export const AdminSystem: React.FC = () => {
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${registrationsOpen ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Section 6: Enrollment Management */}
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-lg font-bold text-text-primary flex items-center gap-2 mb-4">
+            <Key className="w-5 h-5 text-primary" />
+            Enrollment Management
+          </h2>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-text-secondary mb-4">
+              Manage chapter-specific access codes for students.
+            </p>
+            <Link to="/admin/enrollment" className="bangla w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-sm">
+              এনরোলমেন্ট কোড পরিচালনা করুন →
+            </Link>
           </div>
         </div>
       </div>

@@ -98,25 +98,7 @@ export function DashboardPage() {
     }).filter(Boolean) as any[];
   }, [catalog, oldStats.inProgressVideos]);
 
-  if (error) {
-    return (
-      <StudentLayout>
-        <div className="min-h-[60vh] flex flex-col items-center justify-center bg-gray-50 p-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-            <AlertTriangle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="bangla text-2xl font-bold text-gray-900 mb-2">কন্টেন্ট লোড করতে সমস্যা হচ্ছে</h2>
-          <p className="bangla text-gray-600 mb-6">আপনার ইন্টারনেট সংযোগ চেক করুন এবং আবার চেষ্টা করুন।</p>
-          <button 
-            onClick={refreshCatalog}
-            className="bangla px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-          >
-            আবার চেষ্টা করুন
-          </button>
-        </div>
-      </StudentLayout>
-    );
-  }
+
 
   return (
     <StudentLayout>
@@ -128,6 +110,26 @@ export function DashboardPage() {
         transition={{ duration: 0.4 }}
         className="max-w-6xl mx-auto"
       >
+        {error && !catalog && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="bangla text-amber-700 text-sm">
+                {error.includes('চালু') ? 
+                  'সার্ভার চালু হচ্ছে... কিছুক্ষণ পরে বিষয়সমূহ দেখা যাবে।' : 
+                  'কন্টেন্ট লোড করতে সমস্যা হচ্ছে।'
+                }
+              </p>
+            </div>
+            <button 
+              onClick={refreshCatalog}
+              className="bangla text-xs bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors shrink-0"
+            >
+              আবার চেষ্টা
+            </button>
+          </div>
+        )}
+
         {/* Welcome Header */}
         <div className="mb-8">
           <h1 className="bangla text-3xl md:text-4xl font-bold text-gray-900 mb-2">
@@ -255,11 +257,15 @@ export function DashboardPage() {
         <section id="courses" className="mb-12">
           <h2 className="bangla text-2xl font-bold text-gray-900 mb-6">আমার কোর্সসমূহ</h2>
           
-          {isLoading ? (
+          {isLoading || !catalog ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-64 w-full rounded-xl" />
               ))}
+            </div>
+          ) : catalog.subjects.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="bangla text-gray-500">কোনো বিষয় পাওয়া যায়নি। Admin থেকে বিষয় যোগ করুন।</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

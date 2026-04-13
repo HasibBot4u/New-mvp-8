@@ -79,7 +79,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const fetchWithRetry = async (retries = 3, delayMs = 15000): Promise<CatalogData> => {
+  const fetchWithRetry = async (retries = 2, delayMs = 8000): Promise<CatalogData> => {
     for (let i = 0; i < retries; i++) {
       try {
         if (i > 0) {

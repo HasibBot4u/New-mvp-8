@@ -51,23 +51,32 @@ export const LoginPage: React.FC = () => {
       }
       
       if (data.session) {
-        await logActivity(data.user.id, 'login', { email });
+        try {
+          await logActivity(data.user.id, 'login', { email });
+        } catch {
+          console.warn('Failed to log activity');
+        }
+
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .maybeSingle();
         
-        if (!profile && (!profileError || profileError.code === 'PGRST116')) {
-          await supabase.from('profiles').upsert(
-            {
-              id: data.user.id,
-              email: data.user.email,
-              display_name: data.user.email?.split('@')[0] || 'User',
-              role: 'user',
-            },
-            { onConflict: 'id', ignoreDuplicates: true }
-          );
+        try {
+          if (!profile && (!profileError || profileError.code === 'PGRST116')) {
+            await supabase.from('profiles').upsert(
+              {
+                id: data.user.id,
+                email: data.user.email,
+                display_name: data.user.email?.split('@')[0] || 'User',
+                role: 'user',
+              },
+              { onConflict: 'id', ignoreDuplicates: true }
+            );
+          }
+        } catch {
+          console.warn('Profile upsert failed, continuing...');
         }
         
         if (profile?.role === 'admin') {

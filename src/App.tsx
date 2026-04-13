@@ -47,16 +47,19 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   const { user, profile, isLoading: authLoading } = useAuth();
   const { settings, isLoading: settingsLoading } = useSystemSettings();
 
-  if (authLoading || settingsLoading || (user && !profile)) {
+  if (authLoading || settingsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner />
+        <div className="text-center">
+          <LoadingSpinner />
+          <p className="mt-3 text-gray-500 bangla text-sm">লোড হচ্ছে...</p>
+        </div>
       </div>
     );
   }
 
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
 
   if (settings?.maintenance_mode && profile?.role !== 'admin') {
@@ -82,7 +85,7 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   }
 
   if (requireAdmin && profile?.role !== 'admin') {
-    return <Navigate to="/dashboard" />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

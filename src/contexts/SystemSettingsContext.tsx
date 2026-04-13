@@ -24,22 +24,32 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchSettings = async () => {
+    // Hard timeout: if fetch takes >5s, use defaults immediately
+    const timeoutId = setTimeout(() => {
+      console.warn('[Settings] Timeout — using defaults');
+      setSettings({ registrations_open: true, maintenance_mode: false });
+      setIsLoading(false);
+    }, 5000);
+
     try {
-      const { data, error } = await supabase.from('system_settings').select('key, value');
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('key, value');
       
-      if (data) {
+      if (data && !error) {
         setSettings({
           registrations_open: data.find(x => x.key === 'registrations_open')?.value !== 'false',
-          maintenance_mode: data.find(x => x.key === 'maintenance_mode')?.value === 'true'
+          maintenance_mode: data.find(x => x.key === 'maintenance_mode')?.value === 'true',
         });
+      } else {
+        setSettings({ registrations_open: true, maintenance_mode: false });
       }
-    } catch (e) {
-      console.error('Error fetching system settings:', e);
-      // Fallback defaults
+    } catch {
+      // Table missing, RLS error, or network failure — safe defaults
       setSettings({ registrations_open: true, maintenance_mode: false });
     } finally {
-      setIsLoading(false);
+      clearTimeout(timeoutId);
+      setIsLoading(false);  // ALWAYS runs
     }
   };
 

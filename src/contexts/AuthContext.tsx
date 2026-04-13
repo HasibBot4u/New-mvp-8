@@ -65,6 +65,17 @@ export const AuthProvider: React.FC<{
     mountedRef.current = true;
 
     const initAuth = async () => {
+      // Safety net: if auth init takes >10s, assume logged out
+      const timeoutId = setTimeout(() => {
+        if (mountedRef.current) {
+          console.warn('[Auth] Timeout — assuming logged out');
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setIsLoading(false);
+        }
+      }, 10000);
+
       try {
         // Step 1: Get current session synchronously from localStorage
         const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -90,6 +101,7 @@ export const AuthProvider: React.FC<{
           setProfile(null);
         }
       } finally {
+        clearTimeout(timeoutId);
         // CRITICAL: always set isLoading false, no matter what
         if (mountedRef.current) setIsLoading(false);
       }

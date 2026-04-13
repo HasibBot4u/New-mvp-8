@@ -153,7 +153,7 @@ export function PlayerPage() {
     
     supabase
       .from('watch_history')
-      .select('video_id, completed')
+      .select('video_id, completed, progress_seconds, watched_at')
       .eq('user_id', user.id)
       .in('video_id', chapterVideoIds)
       .eq('completed', true)

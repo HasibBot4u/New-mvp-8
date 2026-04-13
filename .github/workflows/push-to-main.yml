@@ -15,7 +15,7 @@ jobs:
 
       - name: Clone render repo
         run: |
-          git clone https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/HasibBot4u/New-mvp-7.git render-repo
+          git clone https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/HasibBot4u/New-mvp-8.git render-repo
 
       - name: Copy frontend files (NOT backend files)
         run: |

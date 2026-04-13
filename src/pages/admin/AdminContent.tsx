@@ -210,13 +210,14 @@ export const AdminContent: React.FC = () => {
         const chapter = allChapters.find(c => c.id === dataToSave.chapter_id);
         const cycle = allCycles.find(c => c.id === chapter?.cycle_id);
         const isChapterChanged = dataToSave.chapter_id !== editingItem?.chapter_id;
-        if (isChapterChanged && cycle?.telegram_channel_id) {
+        const isNewVideo = !editingItem;
+        if ((isNewVideo || isChapterChanged) && cycle?.telegram_channel_id) {
           dataToSave.telegram_channel_id = cycle.telegram_channel_id;
         }
       }
 
       if (activeTab === 'subjects' && !dataToSave.slug && dataToSave.name) {
-        dataToSave.slug = dataToSave.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        dataToSave.slug = dataToSave.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       }
 
       if (activeTab === 'announcements') {
@@ -260,16 +261,16 @@ export const AdminContent: React.FC = () => {
 
       setIsModalOpen(false);
       clearCatalogCache();
-      await refreshCatalog();
+      await refreshCatalog().catch(() => {});
+      
       if (activeTab === 'live_classes') {
         await fetchLiveClasses();
       } else if (activeTab === 'announcements') {
         await fetchAnnouncements();
       } else {
         await fetchAllContent();
-        await refreshCatalog();
       }
-      showToast(`${activeTab.slice(0, -1)} saved successfully`);
+      showToast('সেভ হয়েছে ✓', 'success');
     } catch (error) {
       console.error(`Error saving ${activeTab}:`, error);
       showToast(`Failed to save ${activeTab.slice(0, -1)}`);
