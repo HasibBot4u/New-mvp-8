@@ -270,7 +270,7 @@ export const AdminContent: React.FC = () => {
       } else {
         await fetchAllContent();
       }
-      showToast('সেভ হয়েছে ✓', 'success');
+      showToast('সেভ হয়েছে ✓');
     } catch (error) {
       console.error(`Error saving ${activeTab}:`, error);
       showToast(`Failed to save ${activeTab.slice(0, -1)}`);

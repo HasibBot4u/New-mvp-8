@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CatalogData } from '../types';
 import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 interface CatalogContextType {
   catalog: CatalogData | null;
@@ -43,6 +44,29 @@ const saveToCache = (data: CatalogData) => {
   }
 };
 
+const fetchSubjectsFallback = async (): Promise<CatalogData | null> => {
+  try {
+    const { data } = await supabase
+      .from('subjects')
+      .select('id, name, name_bn, slug, icon, color, thumbnail_color, display_order')
+      .eq('is_active', true)
+      .order('display_order');
+    
+    if (!data || data.length === 0) return null;
+    
+    // Build minimal catalog from subjects only
+    return {
+      subjects: data.map((s: any) => ({
+        ...s,
+        cycles: []  // No cycles yet — user can still see subjects
+      })),
+      total_videos: 0
+    } as CatalogData;
+  } catch {
+    return null;
+  }
+};
+
 export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,8 +92,11 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // After catalog fetch succeeds, trigger backend warmup
       api.warmup();
     } catch {
-      if (cachedData || catalog) {
-        // Soft error if we have data
+      const fallback = await fetchSubjectsFallback();
+      if (fallback && fallback.subjects.length > 0) {
+        setCatalog(fallback);
+        setError("সার্ভার চালু হচ্ছে। ভিডিও লিস্ট শীঘ্রই লোড হবে।");
+      } else if (cachedData || catalog) {
         setError("সার্ভার চালু হচ্ছে। তথ্য আপডেট হচ্ছে...");
       } else {
         setError("সার্ভার অনুপলব্ধ। পরে চেষ্টা করুন।");

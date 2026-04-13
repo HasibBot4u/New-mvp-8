@@ -55,6 +55,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 sm:gap-4">
+          {profile?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span className="bangla">অ্যাডমিন</span>
+            </Link>
+          )}
           <button 
             onClick={() => navigate('/notifications')}
             className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
@@ -95,11 +104,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                   {profile?.role === 'admin' && (
                     <Link 
                       to="/admin" 
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 bangla transition-colors"
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 bangla transition-colors"
                       onClick={() => setIsDropdownOpen(false)}
                     >
                       <Shield className="w-4 h-4" />
                       অ্যাডমিন প্যানেল
+                      <span className="ml-auto bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded">Admin</span>
                     </Link>
                   )}
                   

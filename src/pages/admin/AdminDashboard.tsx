@@ -52,6 +52,9 @@ export const AdminDashboard: React.FC = () => {
   const [watchChartData, setWatchChartData] = useState<any[]>([]);
   const healthFailuresRef = useRef(0);
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -155,7 +158,7 @@ export const AdminDashboard: React.FC = () => {
       console.warn('Health check failed:', error);
       healthFailuresRef.current += 1;
       
-      if (healthFailuresRef.current >= 3) {
+      if (healthFailuresRef.current >= 5) {
         setHealth({ status: 'offline', telegram: 'offline', videos_cached: 0, messages_cached: 0, channels_resolved: 0, catalog_age_seconds: 0 });
       } else {
         setHealth({ status: 'degraded', telegram: 'reconnecting', videos_cached: 0, messages_cached: 0, channels_resolved: 0, catalog_age_seconds: 0 });
@@ -302,16 +305,16 @@ export const AdminDashboard: React.FC = () => {
   const renderOverallStatus = () => {
     if (!health) return <><span className="w-2 h-2 rounded-full bg-gray-400 mr-2"></span><span className="font-medium text-gray-700 bangla">চেক করা হচ্ছে...</span></>;
     
-    if (health.status === 'offline' && healthFailuresRef.current >= 3) {
+    if (health.status === 'offline' && healthFailuresRef.current >= 5) {
       return <><XCircle size={16} className="text-red-500 mr-2" /><span className="font-medium text-red-700 bangla">সার্ভার বন্ধ ✗</span></>;
     }
     
     if (health.status === 'ok' && health.telegram === 'connected') {
-      return <><CheckCircle size={16} className="text-green-500 mr-2" /><span className="font-medium text-green-700 bangla">সব ঠিক আছে ✓</span></>;
+      return <><CheckCircle size={16} className="text-green-500 mr-2" /><span className="font-medium text-green-700 bangla">সার্ভার সক্রিয় ✓</span></>;
     }
     
     if (health.status === 'degraded' || health.telegram !== 'connected' || health.status === 'offline') {
-      return <><RefreshCw size={16} className="text-amber-500 mr-2 animate-spin" /><span className="font-medium text-amber-700 bangla">সার্ভার চালু হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন</span></>;
+      return <><RefreshCw size={16} className="text-amber-500 mr-2 animate-spin" /><span className="font-medium text-amber-700 bangla">সার্ভার চালু হচ্ছে... ⟳</span></>;
     }
 
     return <><AlertTriangle size={16} className="text-amber-500 mr-2" /><span className="font-medium text-amber-700 bangla">সমস্যা</span></>;
@@ -441,9 +444,9 @@ export const AdminDashboard: React.FC = () => {
           </h2>
         </div>
         <div className="p-5">
-          {watchChartData.some(d => d.count > 0) ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+          {isMounted && watchChartData.some(d => d.count > 0) ? (
+            <div className="h-64 w-full min-h-0">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={watchChartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />

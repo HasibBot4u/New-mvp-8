@@ -17,10 +17,18 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const translateError = (msg: string): string => {
-    if (msg.includes('already registered')) return 'এই ইমেইলে একাউন্ট আছে। লগইন করুন।';
-    if (msg.includes('Password should be')) return 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে';
-    if (msg.includes('Invalid email') || msg.includes('email address is invalid')) return 'ইমেইল সঠিক নয়';
-    if (msg.includes('Database error')) return 'সার্ভার সমস্যা। কিছুক্ষণ পরে চেষ্টা করুন।';
+    if (msg.includes('already registered') || msg.includes('User already')) 
+      return 'এই ইমেইলে একাউন্ট আছে। লগইন করুন।';
+    if (msg.includes('Password should be'))
+      return 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে';
+    if (msg.includes('Invalid email') || msg.includes('email address is invalid'))
+      return 'ইমেইল সঠিক নয়';
+    if (msg.includes('Database error'))
+      return 'সার্ভার সমস্যা। কিছুক্ষণ পরে চেষ্টা করুন।';
+    if (msg.includes('rate') || msg.includes('over_request_limit') || msg.includes('email_rate_limit'))
+      return 'এই মুহূর্তে অনেক রেজিস্ট্রেশন হচ্ছে। ৫ মিনিট পরে চেষ্টা করুন।';
+    if (msg.includes('signup_disabled') || msg.includes('not_enabled'))
+      return 'নতুন রেজিস্ট্রেশন সাময়িকভাবে বন্ধ আছে।';
     return msg;
   };
 
@@ -42,11 +50,23 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
+      const { data: settings } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'registrations_open')
+        .maybeSingle();
+      
+      if (settings?.value === 'false') {
+        setError('নতুন রেজিস্ট্রেশন সাময়িকভাবে বন্ধ আছে।');
+        setIsLoading(false);
+        return;
+      }
+
       const { error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
         options: {
-          data: { full_name: fullName.trim(), display_name: fullName.trim() }
+          data: { display_name: fullName.trim() }
         }
       });
 

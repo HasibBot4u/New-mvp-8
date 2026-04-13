@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Atom, 
@@ -8,7 +8,8 @@ import {
   User,
   X,
   Bell,
-  BookOpen
+  BookOpen,
+  Shield
 } from 'lucide-react';
 import { NexusLogo } from '../shared/NexusLogo';
 import { useAuth } from '../../contexts/AuthContext';
@@ -113,6 +114,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           >
             সাইন আউট
           </button>
+          {profile?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-3 px-4 py-3 text-indigo-600 font-medium bangla border-t border-gray-200 mt-2 hover:bg-indigo-50 transition-colors rounded-lg"
+            >
+              <Shield className="w-5 h-5" />
+              অ্যাডমিন প্যানেল
+            </Link>
+          )}
         </div>
       </aside>
     </>

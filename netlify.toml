@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "20"
   VITE_API_BASE_URL = "https://nexusedu-backend-0bjq.onrender.com"
+  VITE_SUPABASE_URL = ""      # Set this in Netlify dashboard — NOT here
+  VITE_SUPABASE_ANON_KEY = "" # Set this in Netlify dashboard — NOT here
+  VITE_ADMIN_TOKEN = ""       # Set this in Netlify dashboard — NOT here
 
 [[redirects]]
   from = "/*"

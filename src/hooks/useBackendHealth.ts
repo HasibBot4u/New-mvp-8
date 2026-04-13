@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getWorkingBackend } from '../lib/api';
 
 export interface HealthStatus {
@@ -9,6 +9,8 @@ export interface HealthStatus {
   uptime: string;
   lastChecked: Date | null;
   error: string | null;
+  fetchError?: boolean;
+  consecutiveFailures?: number;
 }
 
 const defaultStatus: HealthStatus = {
@@ -23,6 +25,7 @@ const defaultStatus: HealthStatus = {
 
 export function useBackendHealth(autoRefreshSeconds = 30) {
   const [status, setStatus] = useState<HealthStatus>(defaultStatus);
+  const failureCountRef = useRef(0);
 
   const check = useCallback(async () => {
     setStatus(prev => ({ ...prev, isLoading: true, error: null }));
@@ -36,6 +39,8 @@ export function useBackendHealth(autoRefreshSeconds = 30) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+
+      failureCountRef.current = 0;
 
       // Handle BOTH response formats from the backend:
       // Format A: { status: 'ok', telegram: 'connected', catalog_size: 5 }
@@ -65,9 +70,13 @@ export function useBackendHealth(autoRefreshSeconds = 30) {
         uptime: String(uptime),
         lastChecked: new Date(),
         error: null,
+        fetchError: false,
+        consecutiveFailures: 0,
       });
     } catch (e: unknown) {
-      setStatus({
+      failureCountRef.current++;
+      setStatus(prev => ({
+        ...prev,
         isLoading: false,
         isOnline: false,
         telegramConnected: false,
@@ -75,7 +84,9 @@ export function useBackendHealth(autoRefreshSeconds = 30) {
         uptime: '—',
         lastChecked: new Date(),
         error: e instanceof Error ? e.message : 'Connection failed',
-      });
+        fetchError: true,
+        consecutiveFailures: failureCountRef.current,
+      }));
     } finally {
       clearTimeout(timer);
     }
