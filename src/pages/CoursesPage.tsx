@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Atom, Beaker, Calculator, AlertTriangle, PlayCircle } from 'lucide-react';
+import { Atom, Beaker, Calculator, PlayCircle, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Skeleton } from '../components/ui/Skeleton';
 import { StudentLayout } from '../components/layout/StudentLayout';
@@ -15,88 +15,40 @@ export function CoursesPage() {
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        // Lightweight: just subjects first
-        const { data: subjectsData, error } = await supabase
+        // Lightweight query — no deep join
+        const { data, error } = await supabase
           .from('subjects')
-          .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
+          .select('id, name, name_bn, slug, icon, color, thumbnail_color, display_order')
           .eq('is_active', true)
           .order('display_order');
-        
         if (error) throw error;
-        
-        // Fetch video counts per subject via catalog (if backend available)
-        // Otherwise show 0 counts
-        let subjectsWithCounts = (subjectsData || []).map(s => ({ ...s, videoCount: 0 }));
-        
-        // Try to get counts from Supabase directly (fast query)
-        try {
-          const { data: cyclesData } = await supabase
-            .from('cycles')
-            .select('id, subject_id')
-            .eq('is_active', true);
-          
-          if (cyclesData && cyclesData.length > 0) {
-            const cycleIds = cyclesData.map(c => c.id);
-            const { data: chaptersData } = await supabase
-              .from('chapters')
-              .select('id, cycle_id')
-              .in('cycle_id', cycleIds)
-              .eq('is_active', true);
-            
-            if (chaptersData && chaptersData.length > 0) {
-              const chapterIds = chaptersData.map(c => c.id);
-              const { count: videoCount } = await supabase
-                .from('videos')
-                .select('id', { count: 'exact', head: true })
-                .in('chapter_id', chapterIds)
-                .eq('is_active', true);
-              
-              // Distribute count across subjects proportionally or show total
-              const total = videoCount || 0;
-              subjectsWithCounts = subjectsWithCounts.map((s, i) => ({
-                ...s,
-                videoCount: i === 0 ? total : 0  // Simple: show total on first, or split evenly
-              }));
-            }
-          }
-        } catch {
-          // Video count fetch failure is non-critical
-        }
-        
-        setSubjects(subjectsWithCounts);
-      } catch (err) {
-        console.error('Error fetching subjects:', err);
+        setSubjects(data || []);
+      } catch {
         setError(true);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchSubjects();
   }, []);
 
-  const getSubjectStyle = (name: string, thumbnailColor: string) => {
-    if (name.includes('Physics') || name.includes('পদার্থ')) {
-      return { icon: Atom, gradient: 'from-blue-500 to-blue-700' };
-    }
-    if (name.includes('Chemistry') || name.includes('রসায়ন')) {
-      return { icon: Beaker, gradient: 'from-purple-500 to-purple-700' };
-    }
-    if (name.includes('Math') || name.includes('গণিত')) {
-      return { icon: Calculator, gradient: 'from-green-500 to-green-700' };
-    }
-    return { icon: Atom, gradient: thumbnailColor || 'from-indigo-500 to-indigo-700' };
+  const getStyle = (name: string) => {
+    if (name.includes('Physics') || name.includes('পদার্থ'))
+      return { Icon: Atom, gradient: 'from-blue-500 to-blue-700' };
+    if (name.includes('Chemistry') || name.includes('রসায়ন'))
+      return { Icon: Beaker, gradient: 'from-purple-500 to-purple-700' };
+    if (name.includes('Math') || name.includes('গণিত'))
+      return { Icon: Calculator, gradient: 'from-green-500 to-green-700' };
+    return { Icon: Atom, gradient: 'from-indigo-500 to-indigo-700' };
   };
 
   return (
     <StudentLayout>
       <SEO title="বিষয়সমূহ | NexusEdu" />
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.4 }}
-        className="max-w-6xl mx-auto"
+        className="max-w-4xl mx-auto"
       >
         <div className="mb-8">
           <h1 className="bangla text-3xl font-bold text-gray-900 mb-2">বিষয়সমূহ</h1>
@@ -105,50 +57,44 @@ export function CoursesPage() {
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-48 w-full rounded-2xl" />
-            ))}
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-44 w-full rounded-2xl" />)}
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
-            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 bangla mb-2">বিষয় লোড করতে সমস্যা হয়েছে</h3>
-            <p className="text-gray-600 bangla mb-4">অনুগ্রহ করে পেজটি রিলোড করুন অথবা কিছুক্ষণ পর আবার চেষ্টা করুন।</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors bangla font-medium"
-            >
+          <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+            <p className="bangla text-red-700 mb-3">বিষয় লোড করতে সমস্যা হয়েছে</p>
+            <button onClick={() => window.location.reload()}
+              className="bangla px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
               রিলোড করুন
             </button>
           </div>
+        ) : subjects.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+            <p className="bangla text-amber-700">কোনো বিষয় পাওয়া যায়নি।</p>
+            <p className="bangla text-amber-600 text-sm mt-1">Admin প্যানেল থেকে বিষয় যোগ করুন।</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {subjects.map((subject) => {
-              const { icon: Icon, gradient } = getSubjectStyle(subject.name, subject.thumbnail_color);
-              
+            {subjects.map(subject => {
+              const { Icon, gradient } = getStyle(subject.name);
               return (
-                <Link 
-                  key={subject.id} 
+                <Link
+                  key={subject.id}
                   to={`/subject/${subject.slug}`}
-                  className={`bg-gradient-to-br ${gradient} rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 group relative overflow-hidden flex flex-col h-48`}
+                  className={`bg-gradient-to-br ${gradient} rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-1 group relative overflow-hidden flex flex-col h-44`}
                 >
-                  {/* Decorative background elements */}
-                  <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-colors" />
-                  <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-black/10 rounded-full blur-xl" />
-                  
+                  <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
                   <div className="relative z-10 flex justify-between items-start mb-auto">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20">
+                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center border border-white/20">
                       <Icon className="w-6 h-6 text-white" />
                     </div>
-                    <div className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-1.5 border border-white/10">
-                      <PlayCircle className="w-3.5 h-3.5 text-white/90" />
-                      <span className="text-white/90 text-xs font-medium bangla">{subject.videoCount || 0} ক্লাস</span>
-                    </div>
+                    <PlayCircle className="w-5 h-5 text-white/70" />
                   </div>
-                  
                   <div className="relative z-10 mt-4">
-                    <h3 className="bangla text-2xl font-bold text-white mb-1">{subject.name_bn || subject.name}</h3>
-                    <p className="text-white/70 text-sm font-medium">{subject.name}</p>
+                    <h3 className="bangla text-xl font-bold text-white mb-0.5">{subject.name_bn || subject.name}</h3>
+                    <div className="flex items-center gap-1 text-white/70 text-sm">
+                      <span className="bangla">কোর্স দেখুন</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
                   </div>
                 </Link>
               );

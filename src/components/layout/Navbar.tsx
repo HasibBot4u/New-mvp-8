@@ -55,13 +55,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 sm:gap-4">
+          {/* Add this block right before the bell button */}
           {profile?.role === 'admin' && (
             <Link
               to="/admin"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors"
             >
               <Shield className="w-3.5 h-3.5" />
-              <span className="bangla">অ্যাডমিন</span>
+              <span>Admin</span>
             </Link>
           )}
           <button 

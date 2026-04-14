@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { CatalogData } from '../types';
-import { api } from '../lib/api';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { CatalogData, CatalogSubject, CatalogCycle, CatalogChapter, CatalogVideo } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface CatalogContextType {
@@ -13,133 +12,168 @@ interface CatalogContextType {
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
-const CATALOG_CACHE_KEY = 'nexusedu_catalog_v2';
-const CATALOG_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const CACHE_KEY = 'nexusedu_catalog_v3';
+const CACHE_TTL = 10 * 60 * 1000;
 
 export const clearCatalogCache = () => {
-  try {
-    localStorage.removeItem(CATALOG_CACHE_KEY);
-  } catch (e) {
-    console.warn('Failed to clear catalog cache', e);
-  }
+  try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
 };
 
-const loadFromCache = (): CatalogData | null => {
+const loadCache = (): CatalogData | null => {
   try {
-    const raw = localStorage.getItem(CATALOG_CACHE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const { data, timestamp } = JSON.parse(raw);
-    if (Date.now() - timestamp > CATALOG_CACHE_TTL) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) return null;
     return data;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
-const saveToCache = (data: CatalogData) => {
+const saveCache = (data: CatalogData) => {
   try {
-    localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
-  } catch (e) {
-    console.warn('Failed to save catalog to cache', e);
-  }
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+  } catch { /* ignore */ }
 };
 
-const fetchSubjectsFallback = async (): Promise<CatalogData | null> => {
-  try {
-    const { data } = await supabase
-      .from('subjects')
-      .select('id, name, name_bn, slug, icon, color, thumbnail_color, display_order')
+/**
+ * Fetch catalog directly from Supabase.
+ * This is the primary source — does NOT depend on Render backend being awake.
+ */
+async function fetchCatalogFromSupabase(): Promise<CatalogData> {
+  // Step 1: Fetch subjects
+  const { data: subjects, error: subErr } = await supabase
+    .from('subjects')
+    .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
+    .eq('is_active', true)
+    .order('display_order');
+  if (subErr) throw new Error(subErr.message);
+  if (!subjects || subjects.length === 0) {
+    return { subjects: [], total_videos: 0 };
+  }
+
+  // Step 2: Fetch cycles for these subjects
+  const subjectIds = subjects.map((s: any) => s.id);
+  const { data: cycles, error: cycErr } = await supabase
+    .from('cycles')
+    .select('id, subject_id, name, name_bn, telegram_channel_id, display_order')
+    .in('subject_id', subjectIds)
+    .eq('is_active', true)
+    .order('display_order');
+  if (cycErr) throw new Error(cycErr.message);
+
+  const cycleIds = (cycles || []).map((c: any) => c.id);
+  let chapters: any[] = [];
+  let videos: any[] = [];
+
+  if (cycleIds.length > 0) {
+    // Step 3: Fetch chapters
+    const { data: ch, error: chErr } = await supabase
+      .from('chapters')
+      .select('id, cycle_id, name, name_bn, requires_enrollment, display_order')
+      .in('cycle_id', cycleIds)
       .eq('is_active', true)
       .order('display_order');
-    
-    if (!data || data.length === 0) return null;
-    
-    // Build minimal catalog from subjects only
-    return {
-      subjects: data.map((s: any) => ({
-        ...s,
-        cycles: []  // No cycles yet — user can still see subjects
-      })),
-      total_videos: 0
-    } as CatalogData;
-  } catch {
-    return null;
+    if (chErr) throw new Error(chErr.message);
+    chapters = ch || [];
+
+    const chapterIds = chapters.map((c: any) => c.id);
+    if (chapterIds.length > 0) {
+      // Step 4: Fetch videos
+      const { data: vids, error: vidErr } = await supabase
+        .from('videos')
+        .select('id, chapter_id, title, title_bn, telegram_channel_id, telegram_message_id, duration, size_mb, display_order')
+        .in('chapter_id', chapterIds)
+        .eq('is_active', true)
+        .order('display_order');
+      if (vidErr) throw new Error(vidErr.message);
+      videos = vids || [];
+    }
   }
-};
+
+  // Step 5: Build nested catalog structure
+  const videosByChapter: Record<string, CatalogVideo[]> = {};
+  for (const v of videos) {
+    if (!videosByChapter[v.chapter_id]) videosByChapter[v.chapter_id] = [];
+    videosByChapter[v.chapter_id].push(v as CatalogVideo);
+  }
+
+  const chaptersByCycle: Record<string, CatalogChapter[]> = {};
+  for (const ch of chapters) {
+    if (!chaptersByCycle[ch.cycle_id]) chaptersByCycle[ch.cycle_id] = [];
+    chaptersByCycle[ch.cycle_id].push({
+      ...ch,
+      videos: videosByChapter[ch.id] || [],
+    } as CatalogChapter);
+  }
+
+  const cyclesBySubject: Record<string, CatalogCycle[]> = {};
+  for (const cy of (cycles || [])) {
+    if (!cyclesBySubject[cy.subject_id]) cyclesBySubject[cy.subject_id] = [];
+    cyclesBySubject[cy.subject_id].push({
+      ...cy,
+      chapters: chaptersByCycle[cy.id] || [],
+    } as CatalogCycle);
+  }
+
+  const builtSubjects: CatalogSubject[] = subjects.map((s: any) => ({
+    ...s,
+    cycles: cyclesBySubject[s.id] || [],
+  }));
+
+  const totalVideos = videos.length;
+
+  return { subjects: builtSubjects, total_videos: totalVideos };
+}
 
 export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [catalog, setCatalog] = useState<CatalogData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [catalog, setCatalog] = useState<CatalogData | null>(() => loadCache());
+  const [isLoading, setIsLoading] = useState(!loadCache()); // skip loading if cache hit
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCatalog = async (force = false) => {
-    let cachedData = null;
+  const fetchCatalog = useCallback(async (force = false) => {
     if (!force) {
-      cachedData = loadFromCache();
-      if (cachedData) {
-        setCatalog(cachedData);
+      const cached = loadCache();
+      if (cached) {
+        setCatalog(cached);
         setIsLoading(false);
-        // Still fetch in background to update cache
+        // Refresh in background silently
+        fetchCatalogFromSupabase()
+          .then(fresh => { setCatalog(fresh); saveCache(fresh); setError(null); })
+          .catch(() => { /* silent background refresh failure is ok */ });
+        return;
       }
     }
 
+    setIsLoading(true);
+    setError(null);
+
     try {
-      const data = await fetchWithRetry();
+      const data = await fetchCatalogFromSupabase();
       setCatalog(data);
-      saveToCache(data);
+      saveCache(data);
       setError(null);
-      
-      // After catalog fetch succeeds, trigger backend warmup
-      api.warmup();
-    } catch {
-      const fallback = await fetchSubjectsFallback();
-      if (fallback && fallback.subjects.length > 0) {
-        setCatalog(fallback);
-        setError("সার্ভার চালু হচ্ছে। ভিডিও লিস্ট শীঘ্রই লোড হবে।");
-      } else if (cachedData || catalog) {
-        setError("সার্ভার চালু হচ্ছে। তথ্য আপডেট হচ্ছে...");
+    } catch (err: any) {
+      console.error('[Catalog] fetch failed:', err.message);
+      const cached = loadCache();
+      if (cached) {
+        setCatalog(cached);
+        setError(null); // don't show error if we have cached data
       } else {
-        setError("সার্ভার অনুপলব্ধ। পরে চেষ্টা করুন।");
+        setError('ডেটা লোড করতে সমস্যা হয়েছে। পেজ রিলোড করুন।');
       }
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fetchWithRetry = async (retries = 2, delayMs = 8000): Promise<CatalogData> => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        if (i > 0) {
-          setError(`চেষ্টা করা হচ্ছে... (${i + 1}/${retries})`);
-        }
-        const data = await api.getCatalogWithCache();
-        return data;
-      } catch (err) {
-        if (i < retries - 1) {
-          await new Promise(res => setTimeout(res, delayMs));
-        } else {
-          throw err;
-        }
-      }
-    }
-    throw new Error('Backend unavailable after retries');
-  };
+  }, []);
 
   useEffect(() => {
     fetchCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchCatalog]);
 
-  const refreshCatalog = async () => {
-    try {
-      setIsLoading(true);
-      await api.refreshCatalog();
-      await fetchCatalog(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to refresh catalog');
-      throw err;
-    }
-  };
+  const refreshCatalog = useCallback(async () => {
+    clearCatalogCache();
+    await fetchCatalog(true);
+  }, [fetchCatalog]);
 
   return (
     <CatalogContext.Provider value={{ catalog, isLoading, error, refreshCatalog }}>
@@ -149,9 +183,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
 };
 
 export const useCatalog = () => {
-  const context = useContext(CatalogContext);
-  if (context === undefined) {
-    throw new Error('useCatalog must be used within a CatalogProvider');
-  }
-  return context;
+  const ctx = useContext(CatalogContext);
+  if (!ctx) throw new Error('useCatalog must be used within CatalogProvider');
+  return ctx;
 };

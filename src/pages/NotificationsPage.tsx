@@ -1,96 +1,69 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, AlertTriangle, Info, Check } from 'lucide-react';
+import { Bell, CheckCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { StudentLayout } from '../components/layout/StudentLayout';
 import { SEO } from '../components/SEO';
-import { Skeleton } from '../components/ui/Skeleton';
+
+interface Notification {
+  id: string;
+  title: string;
+  title_bn?: string;
+  body?: string;
+  body_bn?: string;
+  type: string;
+  is_read: boolean;
+  action_url?: string;
+  created_at: string;
+}
 
 export default function NotificationsPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    
+    if (!user) { setIsLoading(false); return; }
     const fetchNotifications = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('notifications')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(50);
-          
-        if (!error && data) {
-          setNotifications(data);
-        }
-      } catch (err) {
-        console.error('Error fetching notifications:', err);
+        setNotifications(data || []);
+      } catch {
+        // ignore
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchNotifications();
   }, [user]);
 
-  const markAllAsRead = async () => {
+  const markAllRead = async () => {
     if (!user) return;
-    try {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
-        
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.error('Error marking all as read:', err);
-    }
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const handleNotificationClick = async (notification: any) => {
-    if (!notification.is_read) {
-      try {
-        await supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .eq('id', notification.id);
-          
-        setNotifications(prev => prev.map(n => 
-          n.id === notification.id ? { ...n, is_read: true } : n
-        ));
-      } catch (err) {
-        console.error('Error marking as read:', err);
-      }
-    }
-    
-    if (notification.action_url) {
-      navigate(notification.action_url);
-    }
+  const dismiss = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
-  const getIcon = (type: string) => {
+  const getTypeStyle = (type: string) => {
     switch (type) {
-      case 'success': return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
-      case 'warning': return <AlertTriangle className="w-5 h-5 text-amber-500" />;
-      default: return <Info className="w-5 h-5 text-blue-500" />;
+      case 'success': return 'bg-green-100 text-green-700';
+      case 'warning': return 'bg-yellow-100 text-yellow-700';
+      case 'system':  return 'bg-purple-100 text-purple-700';
+      default:        return 'bg-blue-100 text-blue-700';
     }
-  };
-
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return 'এইমাত্র';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} মিনিট আগে`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} ঘণ্টা আগে`;
-    return `${Math.floor(diffInSeconds / 86400)} দিন আগে`;
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -98,76 +71,69 @@ export default function NotificationsPage() {
   return (
     <StudentLayout>
       <SEO title="নোটিফিকেশন | NexusEdu" />
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 bangla mb-1">নোটিফিকেশন</h1>
-            <p className="text-gray-600 bangla">আপনার সাম্প্রতিক আপডেটসমূহ</p>
+            <h1 className="bangla text-2xl font-bold text-gray-900">নোটিফিকেশন</h1>
+            <p className="bangla text-gray-500 text-sm mt-1">আপনার সাম্প্রতিক আপডেটসমূহ</p>
           </div>
           {unreadCount > 0 && (
-            <button 
-              onClick={markAllAsRead}
-              className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium bangla bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+            <button
+              onClick={markAllRead}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors bangla"
             >
-              <Check className="w-4 h-4" />
-              সব পড়া হিসেবে চিহ্নিত করুন
+              <CheckCheck className="w-4 h-4" />
+              সব পড়া হয়েছে
             </button>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton className="w-10 h-10 rounded-full shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
+        {isLoading ? (
+          <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
+            <div className="w-8 h-8 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+            <p className="bangla text-gray-500 text-sm">লোড হচ্ছে...</p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
+            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="bangla font-medium text-gray-600 mb-1">কোনো নোটিফিকেশন নেই</h3>
+            <p className="bangla text-gray-400 text-sm">নতুন আপডেট আসলে এখানে দেখাবে</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {notifications.map(n => (
+              <div
+                key={n.id}
+                className={`bg-white rounded-xl border p-4 flex items-start gap-3 transition-colors ${
+                  n.is_read ? 'border-gray-100' : 'border-indigo-200 bg-indigo-50/30'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm ${getTypeStyle(n.type)}`}>
+                  <Bell className="w-4 h-4" />
                 </div>
-              ))}
-            </div>
-          ) : notifications.length > 0 ? (
-            <div className="divide-y divide-gray-100">
-              {notifications.map(notification => (
-                <div 
-                  key={notification.id}
-                  onClick={() => handleNotificationClick(notification)}
-                  className={`p-4 flex gap-4 hover:bg-gray-50 transition-colors cursor-pointer relative ${!notification.is_read ? 'bg-indigo-50/30' : ''}`}
-                >
-                  {!notification.is_read && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />
+                <div className="flex-1 min-w-0">
+                  <p className="bangla font-medium text-gray-900 text-sm">
+                    {n.title_bn || n.title}
+                  </p>
+                  {(n.body_bn || n.body) && (
+                    <p className="bangla text-gray-500 text-sm mt-0.5">{n.body_bn || n.body}</p>
                   )}
-                  <div className="shrink-0 mt-1">
-                    {getIcon(notification.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2 mb-1">
-                      <h3 className={`font-medium bangla truncate ${!notification.is_read ? 'text-gray-900' : 'text-gray-700'}`}>
-                        {notification.title_bn || notification.title}
-                      </h3>
-                      <span className="text-xs text-gray-400 whitespace-nowrap shrink-0 bangla">
-                        {getTimeAgo(notification.created_at)}
-                      </span>
-                    </div>
-                    <p className={`text-sm bangla line-clamp-2 ${!notification.is_read ? 'text-gray-700' : 'text-gray-500'}`}>
-                      {notification.body_bn || notification.body}
-                    </p>
-                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(n.created_at).toLocaleDateString('bn-BD')}
+                  </p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-12 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                <Bell className="w-8 h-8 text-gray-400" />
+                {!n.is_read && (
+                  <button
+                    onClick={() => dismiss(n.id)}
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <h3 className="text-lg font-medium text-gray-900 bangla mb-1">কোনো নোটিফিকেশন নেই</h3>
-              <p className="text-gray-500 bangla">আপনার সব নোটিফিকেশন এখানে দেখা যাবে</p>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </StudentLayout>
   );

@@ -13,48 +13,48 @@ interface SystemSettingsContextType {
   refreshSettings: () => Promise<void>;
 }
 
-const SystemSettingsContext = createContext<SystemSettingsContextType>({ 
-  settings: null, 
-  isLoading: true,
-  refreshSettings: async () => {} 
+const DEFAULT_SETTINGS: SystemSettings = { registrations_open: true, maintenance_mode: false };
+
+const SystemSettingsContext = createContext<SystemSettingsContextType>({
+  settings: DEFAULT_SETTINGS,
+  isLoading: false,
+  refreshSettings: async () => {},
 });
 
 export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [settings, setSettings] = useState<SystemSettings | null>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(false); // Start FALSE — don't block app startup
 
   const fetchSettings = async () => {
-    // Hard timeout: if fetch takes >5s, use defaults immediately
-    const timeoutId = setTimeout(() => {
-      console.warn('[Settings] Timeout — using defaults');
-      setSettings({ registrations_open: true, maintenance_mode: false });
-      setIsLoading(false);
-    }, 5000);
+    // Hard 4-second timeout — never block the app
+    const timeoutPromise = new Promise<void>(resolve =>
+      setTimeout(() => { setSettings(DEFAULT_SETTINGS); setIsLoading(false); resolve(); }, 4000)
+    );
 
-    try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('key, value');
-      
-      if (data && !error) {
-        setSettings({
-          registrations_open: data.find(x => x.key === 'registrations_open')?.value !== 'false',
-          maintenance_mode: data.find(x => x.key === 'maintenance_mode')?.value === 'true',
-        });
-      } else {
-        setSettings({ registrations_open: true, maintenance_mode: false });
+    const fetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase.from('system_settings').select('key, value');
+        if (data && !error) {
+          setSettings({
+            registrations_open: data.find(x => x.key === 'registrations_open')?.value !== 'false',
+            maintenance_mode: data.find(x => x.key === 'maintenance_mode')?.value === 'true',
+          });
+        } else {
+          setSettings(DEFAULT_SETTINGS);
+        }
+      } catch {
+        setSettings(DEFAULT_SETTINGS);
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      // Table missing, RLS error, or network failure — safe defaults
-      setSettings({ registrations_open: true, maintenance_mode: false });
-    } finally {
-      clearTimeout(timeoutId);
-      setIsLoading(false);  // ALWAYS runs
-    }
+    })();
+
+    await Promise.race([fetchPromise, timeoutPromise]);
   };
 
   useEffect(() => {
     fetchSettings();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
