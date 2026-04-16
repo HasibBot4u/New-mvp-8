@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LoadingSpinner } from '../components/shared/LoadingSpinner';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,6 +17,10 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const translateError = (msg: string): string => {
     if (msg.includes('already registered') || msg.includes('User already')) 

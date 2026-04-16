@@ -67,7 +67,7 @@ export function LandingPage() {
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                 <Link 
-                  to="/signup" 
+                  to={user ? "/dashboard" : "/signup"}
                   className="w-full sm:w-auto px-8 py-3.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-bold text-lg bangla shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   এখনই শুরু করো

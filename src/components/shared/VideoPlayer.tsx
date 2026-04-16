@@ -98,7 +98,14 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
         const response = await fetchWithTimeout(`${backend}/api/health`, 8000);
         if (!response.ok) throw new Error('Health check failed');
         const health = await response.json();
-        if (health.telegram !== 'connected') {
+        
+        const telegramConnected =
+          health.telegram === 'connected' ||
+          health.telegram_connected === true ||
+          health.telegram?.status === 'connected' ||
+          String(health.telegram).toLowerCase().includes('connect');
+
+        if (!telegramConnected) {
           setNeedsWakeUp(true);
           setIsStarting(false);
           return;
