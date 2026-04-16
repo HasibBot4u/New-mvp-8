@@ -25,7 +25,7 @@ export async function getWorkingBackend(): Promise<string> {
   
   // Try primary
   try {
-    const r = await fetchWithTimeout(`${PRIMARY}/api/health`, 8000);
+    const r = await fetchWithTimeout(`${PRIMARY}/api/health`, 45000);
     if (r.ok) {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ url: PRIMARY, ts: Date.now() }));
       return PRIMARY;

@@ -3,7 +3,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, PictureInPicture, Se
 import { useToast } from '../ui/Toast';
 import { useVideoProgress } from '../../hooks/useVideoProgress';
 import { WakeUpCountdown } from '../WakeUpCountdown';
-import { getStreamUrl, clearBackendCache } from '../../lib/api';
+import { getStreamUrl, clearBackendCache, api } from '../../lib/api';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -95,24 +95,32 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       // Wake-up flow
       try {
         const backend = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
-        const response = await fetchWithTimeout(`${backend}/api/health`, 8000);
-        if (!response.ok) throw new Error('Health check failed');
-        const health = await response.json();
+        const response = await fetchWithTimeout(`${backend}/api/health`, 8000); // Fail fast so WakeUpCountdown takes over
+        const health = response.ok ? await response.json() : {};
         
-        const telegramConnected =
+        const telegramConnected = response.ok && (
           health.telegram === 'connected' ||
           health.telegram_connected === true ||
           health.telegram?.status === 'connected' ||
-          String(health.telegram).toLowerCase().includes('connect');
+          String(health.telegram).toLowerCase().includes('connect')
+        );
 
-        if (!telegramConnected) {
+        if (!response.ok || !telegramConnected) {
           setNeedsWakeUp(true);
           setIsStarting(false);
+          // Trigger warmup immediately
+          api.getWorkingBackend().then(b => {
+            fetch(`${b}/api/warmup`).catch(() => {});
+          });
           return;
         }
       } catch {
         setNeedsWakeUp(true);
         setIsStarting(false);
+        // Trigger warmup immediately
+        api.getWorkingBackend().then(b => {
+          fetch(`${b}/api/warmup`).catch(() => {});
+        });
         return;
       }
 
@@ -540,9 +548,14 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
 
       {/* Wake Up Overlay */}
       {needsWakeUp && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-          <WakeUpCountdown onRetry={handleWakeupRetry} />
-        </div>
+        <WakeUpCountdown 
+          onReady={handleWakeupRetry} 
+          onGiveUp={() => {
+            setNeedsWakeUp(false);
+            setErrorMessage('সার্ভার সংযুক্ত হয়নি। পরে আবার চেষ্টা করুন।');
+            setHasError(true);
+          }}
+        />
       )}
 
       {/* Error Overlay */}

@@ -294,21 +294,28 @@ async def refresh_catalog():
 
 
 # ─── LIFESPAN ─────────────────────────────────────────────────
-async def ensure_telegram_connected():
-    """
-    Checks if the Telegram client is connected.
-    If not, attempts to reconnect automatically.
-    Called before every stream request and by the watchdog.
-    """
-    global tg
+_tg_check_ts: float = 0.0
+_tg_check_ok: bool = False
+
+async def ensure_telegram_connected() -> bool:
+    global tg, _tg_check_ts, _tg_check_ok
+    now = time.time()
+    # Use cached result if checked within last 20 seconds
+    if _tg_check_ok and (now - _tg_check_ts) < 20:
+        return True
     try:
-        if tg is None or not tg.is_connected:
-            print("[NexusEdu] Telegram disconnected, reconnecting...")
-            if tg is not None:
-                try:
-                    await tg.stop()
-                except Exception:
-                    pass
+        if tg is not None and getattr(tg, 'is_connected', False):
+            _tg_check_ok = True
+            _tg_check_ts = now
+            return True
+        # Need to reconnect
+        print("[NexusEdu] Telegram disconnected — reconnecting...", flush=True)
+        if tg is not None:
+            try:
+                await asyncio.wait_for(tg.stop(), timeout=5)
+            except Exception:
+                pass
+        if API_ID and API_HASH and SESSION_STRING:
             tg = Client(
                 "nexusedu_session",
                 api_id=API_ID,
@@ -316,13 +323,16 @@ async def ensure_telegram_connected():
                 session_string=SESSION_STRING,
                 in_memory=True,
             )
-            await tg.start()
-            await preload_channels()
-            print("[NexusEdu] Telegram reconnected successfully.")
+            await asyncio.wait_for(tg.start(), timeout=30)
+            print("[NexusEdu] Telegram reconnected.", flush=True)
+            asyncio.create_task(preload_channels())
+            _tg_check_ok = True
+            _tg_check_ts = now
             return True
-        return True
+        return False
     except Exception as e:
-        print(f"[NexusEdu] Reconnect failed: {e}")
+        print(f"[NexusEdu] Reconnect failed: {e}", flush=True)
+        _tg_check_ok = False
         return False
 
 async def telegram_watchdog():
@@ -459,23 +469,26 @@ async def root():
 
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health():
-    telegram_status = "disconnected"
+    is_conn = False
     try:
         if tg is not None:
-            is_conn = getattr(tg, 'is_connected', False)
-            telegram_status = "connected" if is_conn else "reconnecting"
+            is_conn = bool(getattr(tg, 'is_connected', False))
     except Exception:
-        telegram_status = "error"
+        pass
+    
+    tg_status = "connected" if is_conn else ("reconnecting" if tg is not None else "disconnected")
+    overall = "ok" if is_conn else "degraded"
+    
+    catalog_age = round((time.time() - catalog_cache.get("timestamp", 0)) / 60, 1) if catalog_cache.get("timestamp") else 0.0
     
     return JSONResponse({
-        "status": "ok" if telegram_status == "connected" else "degraded",
-        "telegram": telegram_status,
+        "status": overall,
+        "telegram": tg_status,
         "videos_cached": len(video_map),
-        "messages_cached": len(message_cache) if hasattr(message_cache, '__len__') else 0,
-        "channels_resolved": len(resolved_channels),
-        "catalog_age_seconds": round(time.time() - catalog_cache.get("timestamp", 0)) if catalog_cache.get("timestamp") else None,
-        "session_configured": bool(SESSION_STRING),
-        "api_id_configured": bool(API_ID),
+        "messages_cached": len(message_cache),
+        "catalog_age_minutes": catalog_age,
+        "session_set": bool(SESSION_STRING),
+        "api_id_set": bool(API_ID),
     }, headers={"Access-Control-Allow-Origin": "*"})
 
 
