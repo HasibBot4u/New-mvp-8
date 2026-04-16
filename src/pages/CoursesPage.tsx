@@ -16,11 +16,17 @@ export function CoursesPage() {
     const fetchSubjects = async () => {
       try {
         // Lightweight query — no deep join
-        const { data, error } = await supabase
+        const fetchPromise = supabase
           .from('subjects')
           .select('id, name, name_bn, slug, icon, color, thumbnail_color, display_order')
           .eq('is_active', true)
           .order('display_order');
+          
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+        
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
         if (error) throw error;
         setSubjects(data || []);
       } catch {

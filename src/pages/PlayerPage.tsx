@@ -43,12 +43,15 @@ export function PlayerPage() {
     const fetchNotesAndBookmarks = async () => {
       if (!user || !videoId) return;
       try {
-        const { data: notesData, error: notesError } = await supabase
+        const fetchNotesPromise = supabase
           .from('video_notes')
           .select('content')
           .eq('user_id', user.id)
           .eq('video_id', videoId)
           .single();
+          
+        const timeoutPromise1 = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
+        const { data: notesData, error: notesError } = await Promise.race([fetchNotesPromise, timeoutPromise1]) as any;
         
         if (notesData && !notesError) {
           if (mountedRef.current) {
@@ -62,12 +65,15 @@ export function PlayerPage() {
           }
         }
 
-        const { data: bookmarksData, error: bookmarksError } = await supabase
+        const fetchBookmarksPromise = supabase
           .from('video_bookmarks')
           .select('*')
           .eq('user_id', user.id)
           .eq('video_id', videoId)
           .order('timestamp_seconds', { ascending: true });
+          
+        const timeoutPromise2 = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
+        const { data: bookmarksData, error: bookmarksError } = await Promise.race([fetchBookmarksPromise, timeoutPromise2]) as any;
         
         if (bookmarksData && !bookmarksError) {
           if (mountedRef.current) setBookmarks(bookmarksData);

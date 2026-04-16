@@ -57,12 +57,18 @@ export function VideoListPage() {
   const fetchQuizzes = async () => {
     setIsLoadingQuizzes(true);
     try {
-      const { data, error } = await supabase
+      const fetchPromise = supabase
         .from('quizzes')
         .select('*')
         .eq('chapter_id', chapterId)
         .eq('is_published', true)
         .order('created_at', { ascending: true });
+        
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
+      
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
         
       if (error) {
         // Ignore missing table error gracefully

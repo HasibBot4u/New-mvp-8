@@ -45,11 +45,9 @@ const AdminEnrollment = React.lazy(() => import('./pages/admin/AdminEnrollment')
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) {
   const { user, profile, isLoading: authLoading } = useAuth();
-  const { settings, isLoading: settingsLoading } = useSystemSettings();
+  const { settings } = useSystemSettings();
 
-  // Only show spinner while auth is initializing
-  // Remove (user && !profile) — profile always returns a fallback now
-  if (authLoading || settingsLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="w-10 h-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
@@ -59,26 +57,18 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   }
 
   if (!user) return <Navigate to="/login" replace />;
-
-  if (settings?.maintenance_mode && profile?.role !== 'admin') {
-    return <MaintenancePage />;
-  }
-
+  if (settings?.maintenance_mode && profile?.role !== 'admin') return <MaintenancePage />;
   if (profile?.is_blocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-6 text-center">
-          <h2 className="bangla text-xl font-bold text-gray-900 mb-2">অ্যাকাউন্ট স্থগিত</h2>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow p-8 text-center max-w-sm">
+          <p className="bangla text-xl font-bold text-red-600 mb-2">অ্যাকাউন্ট স্থগিত</p>
           <p className="bangla text-gray-600">অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
         </div>
       </div>
     );
   }
-
-  if (requireAdmin && profile?.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  if (requireAdmin && profile?.role !== 'admin') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 

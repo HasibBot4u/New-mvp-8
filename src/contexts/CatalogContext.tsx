@@ -40,89 +40,97 @@ const saveCache = (data: CatalogData) => {
  * This is the primary source — does NOT depend on Render backend being awake.
  */
 async function fetchCatalogFromSupabase(): Promise<CatalogData> {
-  // Step 1: Fetch subjects
-  const { data: subjects, error: subErr } = await supabase
-    .from('subjects')
-    .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
-    .eq('is_active', true)
-    .order('display_order');
-  if (subErr) throw new Error(subErr.message);
-  if (!subjects || subjects.length === 0) {
-    return { subjects: [], total_videos: 0 };
-  }
-
-  // Step 2: Fetch cycles for these subjects
-  const subjectIds = subjects.map((s: any) => s.id);
-  const { data: cycles, error: cycErr } = await supabase
-    .from('cycles')
-    .select('id, subject_id, name, name_bn, telegram_channel_id, display_order')
-    .in('subject_id', subjectIds)
-    .eq('is_active', true)
-    .order('display_order');
-  if (cycErr) throw new Error(cycErr.message);
-
-  const cycleIds = (cycles || []).map((c: any) => c.id);
-  let chapters: any[] = [];
-  let videos: any[] = [];
-
-  if (cycleIds.length > 0) {
-    // Step 3: Fetch chapters
-    const { data: ch, error: chErr } = await supabase
-      .from('chapters')
-      .select('id, cycle_id, name, name_bn, requires_enrollment, display_order')
-      .in('cycle_id', cycleIds)
+  const fetchTask = async () => {
+    // Step 1: Fetch subjects
+    const { data: subjects, error: subErr } = await supabase
+      .from('subjects')
+      .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
       .eq('is_active', true)
       .order('display_order');
-    if (chErr) throw new Error(chErr.message);
-    chapters = ch || [];
+    if (subErr) throw new Error(subErr.message);
+    if (!subjects || subjects.length === 0) {
+      return { subjects: [], total_videos: 0 };
+    }
 
-    const chapterIds = chapters.map((c: any) => c.id);
-    if (chapterIds.length > 0) {
-      // Step 4: Fetch videos
-      const { data: vids, error: vidErr } = await supabase
-        .from('videos')
-        .select('id, chapter_id, title, title_bn, telegram_channel_id, telegram_message_id, duration, size_mb, display_order')
-        .in('chapter_id', chapterIds)
+    // Step 2: Fetch cycles for these subjects
+    const subjectIds = subjects.map((s: any) => s.id);
+    const { data: cycles, error: cycErr } = await supabase
+      .from('cycles')
+      .select('id, subject_id, name, name_bn, telegram_channel_id, display_order')
+      .in('subject_id', subjectIds)
+      .eq('is_active', true)
+      .order('display_order');
+    if (cycErr) throw new Error(cycErr.message);
+
+    const cycleIds = (cycles || []).map((c: any) => c.id);
+    let chapters: any[] = [];
+    let videos: any[] = [];
+
+    if (cycleIds.length > 0) {
+      // Step 3: Fetch chapters
+      const { data: ch, error: chErr } = await supabase
+        .from('chapters')
+        .select('id, cycle_id, name, name_bn, requires_enrollment, display_order')
+        .in('cycle_id', cycleIds)
         .eq('is_active', true)
         .order('display_order');
-      if (vidErr) throw new Error(vidErr.message);
-      videos = vids || [];
+      if (chErr) throw new Error(chErr.message);
+      chapters = ch || [];
+
+      const chapterIds = chapters.map((c: any) => c.id);
+      if (chapterIds.length > 0) {
+        // Step 4: Fetch videos
+        const { data: vids, error: vidErr } = await supabase
+          .from('videos')
+          .select('id, chapter_id, title, title_bn, telegram_channel_id, telegram_message_id, duration, size_mb, display_order')
+          .in('chapter_id', chapterIds)
+          .eq('is_active', true)
+          .order('display_order');
+        if (vidErr) throw new Error(vidErr.message);
+        videos = vids || [];
+      }
     }
-  }
 
-  // Step 5: Build nested catalog structure
-  const videosByChapter: Record<string, CatalogVideo[]> = {};
-  for (const v of videos) {
-    if (!videosByChapter[v.chapter_id]) videosByChapter[v.chapter_id] = [];
-    videosByChapter[v.chapter_id].push(v as CatalogVideo);
-  }
+    // Step 5: Build nested catalog structure
+    const videosByChapter: Record<string, CatalogVideo[]> = {};
+    for (const v of videos) {
+      if (!videosByChapter[v.chapter_id]) videosByChapter[v.chapter_id] = [];
+      videosByChapter[v.chapter_id].push(v as CatalogVideo);
+    }
 
-  const chaptersByCycle: Record<string, CatalogChapter[]> = {};
-  for (const ch of chapters) {
-    if (!chaptersByCycle[ch.cycle_id]) chaptersByCycle[ch.cycle_id] = [];
-    chaptersByCycle[ch.cycle_id].push({
-      ...ch,
-      videos: videosByChapter[ch.id] || [],
-    } as CatalogChapter);
-  }
+    const chaptersByCycle: Record<string, CatalogChapter[]> = {};
+    for (const ch of chapters) {
+      if (!chaptersByCycle[ch.cycle_id]) chaptersByCycle[ch.cycle_id] = [];
+      chaptersByCycle[ch.cycle_id].push({
+        ...ch,
+        videos: videosByChapter[ch.id] || [],
+      } as CatalogChapter);
+    }
 
-  const cyclesBySubject: Record<string, CatalogCycle[]> = {};
-  for (const cy of (cycles || [])) {
-    if (!cyclesBySubject[cy.subject_id]) cyclesBySubject[cy.subject_id] = [];
-    cyclesBySubject[cy.subject_id].push({
-      ...cy,
-      chapters: chaptersByCycle[cy.id] || [],
-    } as CatalogCycle);
-  }
+    const cyclesBySubject: Record<string, CatalogCycle[]> = {};
+    for (const cy of (cycles || [])) {
+      if (!cyclesBySubject[cy.subject_id]) cyclesBySubject[cy.subject_id] = [];
+      cyclesBySubject[cy.subject_id].push({
+        ...cy,
+        chapters: chaptersByCycle[cy.id] || [],
+      } as CatalogCycle);
+    }
 
-  const builtSubjects: CatalogSubject[] = subjects.map((s: any) => ({
-    ...s,
-    cycles: cyclesBySubject[s.id] || [],
-  }));
+    const builtSubjects: CatalogSubject[] = subjects.map((s: any) => ({
+      ...s,
+      cycles: cyclesBySubject[s.id] || [],
+    }));
 
-  const totalVideos = videos.length;
+    const totalVideos = videos.length;
 
-  return { subjects: builtSubjects, total_videos: totalVideos };
+    return { subjects: builtSubjects, total_videos: totalVideos };
+  };
+
+  const timeoutPromise = new Promise<CatalogData>((_, reject) => 
+    setTimeout(() => reject(new Error('Catalog fetch timeout')), 8000)
+  );
+
+  return Promise.race([fetchTask(), timeoutPromise]);
 }
 
 export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

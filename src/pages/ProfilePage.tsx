@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { StudentLayout } from '../components/layout/StudentLayout';
 import { SEO } from '../components/SEO';
-import { Skeleton } from '../components/ui/Skeleton';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
@@ -24,42 +23,31 @@ export function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      if (!user) return;
-      
+    if (!user) { setIsLoading(false); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => { if (!cancelled) setIsLoading(false); }, 5000);
+
+    const run = async () => {
       try {
-        // Fetch fresh profile
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-          
-        if (profileError) throw profileError;
-        setProfile(profileData);
-        setEditName(profileData.display_name || '');
-
-        // Fetch watch stats
-        const { data: historyData, error: historyError } = await supabase
-          .from('watch_history')
-          .select('progress_seconds, completed')
-          .eq('user_id', user.id);
-          
-        if (historyError) throw historyError;
-
-        const completedVideos = historyData?.filter(w => w.completed).length || 0;
-        const totalSeconds = historyData?.reduce((acc, w) => acc + (w.progress_seconds || 0), 0) || 0;
-        const totalHours = Math.floor(totalSeconds / 3600);
-
-        setStats({ totalHours, completedVideos });
-      } catch (error) {
-        console.error('Error fetching profile data:', error);
-      } finally {
-        setIsLoading(false);
-      }
+        const [profResult, histResult] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
+          supabase.from('watch_history').select('progress_seconds,completed').eq('user_id', user.id)
+        ]);
+        if (cancelled) return;
+        if (profResult.data) {
+          setProfile(profResult.data);
+          setEditName(profResult.data.display_name || '');
+        }
+        if (histResult.data) {
+          const done = histResult.data.filter((w: any) => w.completed).length;
+          const secs = histResult.data.reduce((a: number, w: any) => a + (w.progress_seconds || 0), 0);
+          setStats({ completedVideos: done, totalHours: Math.floor(secs / 3600) });
+        }
+      } catch { /* show empty state */ }
+      finally { if (!cancelled) { clearTimeout(timer); setIsLoading(false); } }
     };
-
-    fetchProfileData();
+    run();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [user]);
 
   const handleSignOut = async () => {
@@ -94,13 +82,8 @@ export function ProfilePage() {
   if (isLoading) {
     return (
       <StudentLayout>
-        <SEO title="প্রোফাইল | NexusEdu" />
-        <div className="max-w-3xl mx-auto space-y-6">
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Skeleton className="h-32 w-full rounded-xl" />
-            <Skeleton className="h-32 w-full rounded-xl" />
-          </div>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="w-8 h-8 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
         </div>
       </StudentLayout>
     );

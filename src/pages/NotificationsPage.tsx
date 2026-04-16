@@ -26,12 +26,18 @@ export default function NotificationsPage() {
     if (!user) { setIsLoading(false); return; }
     const fetchNotifications = async () => {
       try {
-        const { data } = await supabase
+        const fetchPromise = supabase
           .from('notifications')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(50);
+          
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+        
+        const { data } = await Promise.race([fetchPromise, timeoutPromise]) as any;
         setNotifications(data || []);
       } catch {
         // ignore
