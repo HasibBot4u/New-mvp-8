@@ -1,7 +1,8 @@
 name: Keep Backend Alive
+
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/14 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,8 +11,9 @@ jobs:
     steps:
       - name: Wake up Render backend
         run: |
-          echo "Pinging backend..."
-          curl -s -o /dev/null -w "Status: %{http_code}" \
+          echo "Pinging backend at $(date)"
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
             https://nexusedu-backend-0bjq.onrender.com/api/health \
-            || echo " (backend was sleeping, woke it up)"
+            --max-time 60 \
+            || echo "Backend was sleeping - woke it up"
           echo "Done"
