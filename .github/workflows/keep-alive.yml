@@ -15,5 +15,5 @@ jobs:
           curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
             https://nexusedu-backend-0bjq.onrender.com/api/health \
             --max-time 60 \
-            || echo "Backend was sleeping - woke it up"
-          echo "Done"
+            || echo "Backend was sleeping, pinging woke it up"
+          echo "Ping complete"

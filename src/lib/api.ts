@@ -9,7 +9,8 @@ async function fetchWithTimeout(url: string, ms: number, options?: RequestInit):
 }
 
 export async function getWorkingBackend(): Promise<string> {
-  const PRIMARY = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
+  const envUrl = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
+  const PRIMARY = envUrl.replace(/\/$/, '');
   const REPLIT  = import.meta.env.VITE_REPLIT_URL || '';
   const CACHE_KEY = 'nexusedu_working_backend';
   const TTL = 5 * 60 * 1000;
@@ -59,6 +60,11 @@ export async function refreshCatalog(): Promise<void> {
 }
 
 export async function getStreamUrl(videoId: string): Promise<string> {
+  const cloudflareWorkerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+  if (cloudflareWorkerUrl) {
+    const baseUrl = cloudflareWorkerUrl.replace(/\/$/, '');
+    return `${baseUrl}/api/stream/${videoId}`;
+  }
   const backend = await getWorkingBackend();
   return `${backend}/api/stream/${videoId}`;
 }
@@ -70,7 +76,7 @@ export async function prefetchVideo(videoId: string): Promise<void> {
 
 export async function fetchBackendHealth(): Promise<Record<string, unknown>> {
   const backend = await getWorkingBackend();
-  const r = await fetchWithTimeout(`${backend}/api/health`, 6000);
+  const r = await fetchWithTimeout(`${backend}/api/health`, 30000); // Wait longer for backend
   return r.json();
 }
 

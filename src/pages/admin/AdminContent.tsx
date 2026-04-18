@@ -43,14 +43,6 @@ export const AdminContent: React.FC = () => {
     fetchAnnouncements();
   }, []);
 
-  React.useEffect(() => {
-    if (!isLoadingContent && allSubjects.length === 0 && activeTab === 'subjects') {
-      setIsModalOpen(true);
-      setEditingItem(null);
-      setFormData({ is_active: true, display_order: 0, color: 'blue' });
-    }
-  }, [isLoadingContent, allSubjects.length, activeTab]);
-
   const fetchAllContent = async () => {
     setIsLoadingContent(true);
     try {
@@ -1015,9 +1007,14 @@ export const AdminContent: React.FC = () => {
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select Cycle</option>
-                  {allCycles.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  {allCycles.map(c => {
+                    const subject = allSubjects.find(s => s.id === c.subject_id);
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {subject ? `${subject.name} - ` : ''}{c.name}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div>
@@ -1079,6 +1076,36 @@ export const AdminContent: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Thumbnail URL</label>
+                <input
+                  type="url"
+                  value={formData.thumbnail_url || ''}
+                  onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="https://example.com/thumbnail.jpg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  rows={3}
+                  placeholder="Video description..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">Description (BN)</label>
+                <textarea
+                  value={formData.description_bn || ''}
+                  onChange={(e) => setFormData({ ...formData, description_bn: e.target.value })}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary bangla"
+                  rows={3}
+                  placeholder="ভিডিওর বিবরণ..."
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">Chapter</label>
                 <select
                   required
@@ -1129,6 +1156,28 @@ export const AdminContent: React.FC = () => {
                     value={formData.size_mb || ''}
                     onChange={(e) => setFormData({ ...formData, size_mb: parseFloat(e.target.value) })}
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1">File Size (Bytes)</label>
+                  <input
+                    type="number"
+                    value={formData.file_size_bytes || ''}
+                    onChange={(e) => setFormData({ ...formData, file_size_bytes: parseInt(e.target.value) || null })}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    placeholder="e.g. 662710517"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1">Mime Type</label>
+                  <input
+                    type="text"
+                    value={formData.mime_type || 'video/mp4'}
+                    onChange={(e) => setFormData({ ...formData, mime_type: e.target.value })}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    placeholder="video/mp4"
                   />
                 </div>
               </div>

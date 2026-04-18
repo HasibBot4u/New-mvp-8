@@ -27,6 +27,7 @@ def _require_env(key: str) -> str:
 API_ID_STR  = _require_env("TELEGRAM_API_ID")
 API_HASH    = _require_env("TELEGRAM_API_HASH")
 SESSION_STRING = _require_env("PYROGRAM_SESSION_STRING")
+SESSION_STRING_2 = os.environ.get("PYROGRAM_SESSION_STRING_2", "").strip()
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
@@ -84,6 +85,9 @@ class LRUDict:
         return len(self._store)
 
 tg: Optional[Client] = None
+tg2: Optional[Client] = None   # Second Telegram client for failover
+_tg_check_ts: float = 0.0
+_tg_check_ok: bool = False
 catalog_cache   = {"data": None, "timestamp": 0}
 video_map       = {}          # uuid → {channel_id, message_id}
 message_cache: LRUDict = LRUDict(max_size=300, ttl_seconds=3600)
@@ -120,24 +124,67 @@ async def get_message(channel_id: int, message_id: int):
     """Fetch and cache a Telegram message object."""
     key = f"{channel_id}_{message_id}"
     if key not in message_cache:
-        msg = await tg.get_messages(channel_id, message_id)
+        client = get_active_client()
+        if client is None:
+            raise Exception("No Telegram client available")
+        msg = await client.get_messages(channel_id, message_id)
         message_cache[key] = msg
     return message_cache.get(key)
 
 
-async def get_file_info(channel_id: int, message_id: int) -> Tuple[int, str]:
-    """
-    Returns (file_size_bytes, mime_type).
-    Always serve as video/mp4 for browser compatibility.
-    MKV files will get error code 3 (decode error) which we handle in frontend.
-    """
+async def get_file_info(channel_id: int, message_id: int, video_id: str = None) -> Tuple[int, str]:
+    """Get file size and MIME type, with Supabase caching to avoid repeated Telegram API calls."""
+    # Check Supabase cache first (avoids hitting Telegram API every play)
+    if video_id and SUPABASE_URL and SUPABASE_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as hclient:
+                r = await hclient.get(
+                    f"{SUPABASE_URL}/rest/v1/videos",
+                    params={"id": f"eq.{video_id}", "select": "file_size_bytes,mime_type"},
+                    headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    if data and data[0].get("file_size_bytes"):
+                        return int(data[0]["file_size_bytes"]), data[0].get("mime_type", "video/mp4")
+        except Exception:
+            pass  # Fall through to Telegram fetch
+    # Fetch from Telegram
     msg = await get_message(channel_id, message_id)
-    mime_type = "video/mp4"
+    size = 0
+    mime = "video/mp4"  # Always use mp4 for browser compatibility
     if msg.video:
-        return msg.video.file_size, mime_type
-    if msg.document:
-        return msg.document.file_size, mime_type
-    return 0, mime_type
+        size = msg.video.file_size or 0
+    elif msg.document:
+        size = msg.document.file_size or 0
+        # Force mp4 even for mkv/avi — browser will show clear error if wrong format
+    # Cache to Supabase (fire and forget — don't block streaming)
+    if video_id and size > 0 and SUPABASE_URL and SUPABASE_KEY:
+        asyncio.create_task(_save_file_metadata(video_id, size, mime))
+    return size, mime
+
+async def _save_file_metadata(video_id: str, size: int, mime: str):
+    """Save file metadata to Supabase so we never fetch from Telegram again for this video."""
+    try:
+        import json as _json
+        async with httpx.AsyncClient(timeout=5.0) as hclient:
+            await hclient.patch(
+                f"{SUPABASE_URL}/rest/v1/videos",
+                params={"id": f"eq.{video_id}"},
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                content=_json.dumps({
+                    "file_size_bytes": size,
+                    "mime_type": mime,
+                    "telegram_fetched_at": "now()"
+                })
+            )
+    except Exception as e:
+        print(f"[NexusEdu] Failed to cache file metadata: {e}", flush=True)
 
 
 # ─── PRE-WARM (eliminates cold-start delay on first play) ─────
@@ -294,46 +341,61 @@ async def refresh_catalog():
 
 
 # ─── LIFESPAN ─────────────────────────────────────────────────
-_tg_check_ts: float = 0.0
-_tg_check_ok: bool = False
-
 async def ensure_telegram_connected() -> bool:
-    global tg, _tg_check_ts, _tg_check_ok
+    global tg, tg2, _tg_check_ts, _tg_check_ok
     now = time.time()
-    # Use cached result if checked within last 20 seconds
+    # Use cached result if checked recently and it was good
     if _tg_check_ok and (now - _tg_check_ts) < 20:
         return True
+    # Check primary client
+    if tg is not None and getattr(tg, 'is_connected', False):
+        _tg_check_ok = True
+        _tg_check_ts = now
+        return True
+    # Check secondary client
+    if tg2 is not None and getattr(tg2, 'is_connected', False):
+        print("[NexusEdu] Primary down, secondary client is connected.", flush=True)
+        _tg_check_ok = True
+        _tg_check_ts = now
+        return True
+    # Need to reconnect primary
+    print("[NexusEdu] Telegram disconnected — reconnecting...", flush=True)
     try:
-        if tg is not None and getattr(tg, 'is_connected', False):
-            _tg_check_ok = True
-            _tg_check_ts = now
-            return True
-        # Need to reconnect
-        print("[NexusEdu] Telegram disconnected — reconnecting...", flush=True)
         if tg is not None:
             try:
                 await asyncio.wait_for(tg.stop(), timeout=5)
             except Exception:
                 pass
         if API_ID and API_HASH and SESSION_STRING:
-            tg = Client(
-                "nexusedu_session",
-                api_id=API_ID,
-                api_hash=API_HASH,
-                session_string=SESSION_STRING,
-                in_memory=True,
-            )
+            tg = Client("nexusedu_session", api_id=API_ID, api_hash=API_HASH,
+                        session_string=SESSION_STRING, in_memory=True)
             await asyncio.wait_for(tg.start(), timeout=30)
-            print("[NexusEdu] Telegram reconnected.", flush=True)
+            print("[NexusEdu] Primary Telegram reconnected.", flush=True)
             asyncio.create_task(preload_channels())
             _tg_check_ok = True
             _tg_check_ts = now
             return True
-        return False
     except Exception as e:
-        print(f"[NexusEdu] Reconnect failed: {e}", flush=True)
-        _tg_check_ok = False
-        return False
+        print(f"[NexusEdu] Primary reconnect failed: {e}", flush=True)
+    # Try secondary as fallback
+    if SESSION_STRING_2:
+        try:
+            if tg2 is not None:
+                try:
+                    await asyncio.wait_for(tg2.stop(), timeout=5)
+                except Exception:
+                    pass
+            tg2 = Client("nexusedu_session2", api_id=API_ID, api_hash=API_HASH,
+                          session_string=SESSION_STRING_2, in_memory=True)
+            await asyncio.wait_for(tg2.start(), timeout=30)
+            print("[NexusEdu] Secondary Telegram connected as fallback.", flush=True)
+            _tg_check_ok = True
+            _tg_check_ts = now
+            return True
+        except Exception as e2:
+            print(f"[NexusEdu] Secondary reconnect also failed: {e2}", flush=True)
+    _tg_check_ok = False
+    return False
 
 async def telegram_watchdog():
     """Monitor Telegram connection with exponential backoff."""
@@ -351,7 +413,7 @@ async def telegram_watchdog():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global tg
+    global tg, tg2
     api_id   = API_ID
     api_hash = API_HASH
     session  = SESSION_STRING
@@ -377,6 +439,17 @@ async def lifespan(app: FastAPI):
             print("[NexusEdu] Backend starting WITHOUT Telegram. Videos will not stream.", flush=True)
             tg = None  # Reset to None so health endpoint shows disconnected cleanly
 
+    # Start secondary client if available
+    if SESSION_STRING_2 and API_ID and API_HASH:
+        try:
+            tg2 = Client("nexusedu_session2", api_id=API_ID, api_hash=API_HASH,
+                          session_string=SESSION_STRING_2, in_memory=True)
+            await asyncio.wait_for(tg2.start(), timeout=30)
+            print("[NexusEdu] Secondary Telegram client started.", flush=True)
+        except Exception as e:
+            print(f"[NexusEdu] Secondary client failed to start: {e}", flush=True)
+            tg2 = None
+
     await refresh_catalog()
     asyncio.create_task(telegram_watchdog())
     yield  # FastAPI serves requests here
@@ -384,6 +457,12 @@ async def lifespan(app: FastAPI):
     if tg is not None:
         try:
             await tg.stop()
+        except Exception:
+            pass
+
+    if tg2 is not None:
+        try:
+            await tg2.stop()
         except Exception:
             pass
 
@@ -406,6 +485,14 @@ app.add_middleware(
 
 
 # ─── STREAMING CORE ───────────────────────────────────────────
+def get_active_client() -> Optional[Client]:
+    """Return the first connected Telegram client available."""
+    if tg is not None and getattr(tg, 'is_connected', False):
+        return tg
+    if tg2 is not None and getattr(tg2, 'is_connected', False):
+        return tg2
+    return tg  # Return primary even if disconnected (will trigger reconnect)
+
 async def _stream_telegram(
     channel_id: int, message_id: int,
     start: int, end: int, total: int
@@ -424,8 +511,12 @@ async def _stream_telegram(
     target      = end - start + 1
     first_chunk = True
 
+    client = get_active_client()
+    if client is None:
+        raise Exception("No Telegram client available")
+    
     try:
-        async for chunk in tg.stream_media(msg, offset=chunk_offset, limit=needed):
+        async for chunk in client.stream_media(msg, offset=chunk_offset, limit=needed):
             data = bytes(chunk)
             if first_chunk and skip_bytes:
                 data        = data[skip_bytes:]
@@ -481,14 +572,19 @@ async def health():
     
     catalog_age = round((time.time() - catalog_cache.get("timestamp", 0)) / 60, 1) if catalog_cache.get("timestamp") else 0.0
     
+    tg2_status = "not_configured"
+    if SESSION_STRING_2:
+        tg2_status = "connected" if (tg2 is not None and getattr(tg2, 'is_connected', False)) else "disconnected"
+    
     return JSONResponse({
         "status": overall,
         "telegram": tg_status,
+        "telegram_secondary": tg2_status,
         "videos_cached": len(video_map),
         "messages_cached": len(message_cache),
         "catalog_age_minutes": catalog_age,
         "session_set": bool(SESSION_STRING),
-        "api_id_set": bool(API_ID),
+        "session2_set": bool(SESSION_STRING_2),
     }, headers={"Access-Control-Allow-Origin": "*"})
 
 
@@ -639,7 +735,7 @@ async def stream_video(video_id: str, request: Request):
     await resolve_channel(channel_id)
 
     try:
-        total, mime_type = await get_file_info(channel_id, message_id)
+        total, mime_type = await get_file_info(channel_id, message_id, video_id=video_id)
         if not total:
             raise HTTPException(500, "Could not read file size from Telegram")
 

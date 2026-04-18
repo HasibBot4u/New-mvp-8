@@ -100,9 +100,11 @@ export const AdminDashboard: React.FC = () => {
     try {
       const { data: adminStats, error } = await supabase.rpc('get_admin_stats');
       
+      let needsFallback = false;
+
       if (error) {
         console.error('Error fetching admin stats via RPC:', error);
-        await fetchFallbackStats();
+        needsFallback = true;
       } else if (adminStats) {
         setStats({
           total_users: adminStats.total_users || 0,
@@ -115,13 +117,23 @@ export const AdminDashboard: React.FC = () => {
           announcements_count: adminStats.announcements_count || 0
         });
 
-        if (adminStats.recent_signups) {
+        if (adminStats.recent_signups && adminStats.recent_signups.length > 0) {
           setRecentSignups(adminStats.recent_signups);
+        } else {
+          needsFallback = true;
         }
 
-        if (adminStats.recent_activity) {
+        if (adminStats.recent_activity && adminStats.recent_activity.length > 0) {
           setRecentActivity(adminStats.recent_activity);
+        } else {
+          needsFallback = true;
         }
+      } else {
+        needsFallback = true;
+      }
+
+      if (needsFallback) {
+        await fetchFallbackStats();
       }
 
       // Fetch watch history chart data

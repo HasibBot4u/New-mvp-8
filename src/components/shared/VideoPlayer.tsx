@@ -96,23 +96,23 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       try {
         const backend = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
         const response = await fetchWithTimeout(`${backend}/api/health`, 8000); // Fail fast so WakeUpCountdown takes over
-        const health = response.ok ? await response.json() : {};
-        
-        const telegramConnected = response.ok && (
-          health.telegram === 'connected' ||
-          health.telegram_connected === true ||
-          health.telegram?.status === 'connected' ||
-          String(health.telegram).toLowerCase().includes('connect')
-        );
+        const health = response.ok ? await response.json() : null;
+        const fetchError = !response.ok;
 
-        if (!response.ok || !telegramConnected) {
-          setNeedsWakeUp(true);
-          setIsStarting(false);
-          // Trigger warmup immediately
-          api.getWorkingBackend().then(b => {
-            fetch(`${b}/api/warmup`).catch(() => {});
-          });
-          return;
+        // Health check failed OR telegram not connected
+        if (fetchError || !health || health.telegram !== 'connected') {
+          // Check if secondary is connected
+          const secondaryOk = health && health.telegram_secondary === 'connected';
+          if (!secondaryOk) {
+            // Neither client connected — show wakeup
+            setNeedsWakeUp(true);
+            setIsStarting(false);
+            // Trigger warmup immediately
+            api.getWorkingBackend().then(backend => {
+              fetch(`${backend}/api/warmup`).catch(() => {});
+            });
+            return;
+          }
         }
       } catch {
         setNeedsWakeUp(true);
@@ -552,7 +552,7 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
           onReady={handleWakeupRetry} 
           onGiveUp={() => {
             setNeedsWakeUp(false);
-            setErrorMessage('সার্ভার সংযুক্ত হয়নি। পরে আবার চেষ্টা করুন।');
+            setErrorMessage('সার্ভার এখন ব্যস্ত। কিছুক্ষণ পরে আবার চেষ্টা করুন।');
             setHasError(true);
           }}
         />

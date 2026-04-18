@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mountedRef.current) return;
 
-      if (event === 'TOKEN_REFRESH_FAILED') {
+      if (event as string === 'TOKEN_REFRESH_FAILED') {
         // Token is irreversibly broken, force sign out to clean state
         supabase.auth.signOut().catch(() => {});
         setSession(null); setUser(null); setProfile(null);
