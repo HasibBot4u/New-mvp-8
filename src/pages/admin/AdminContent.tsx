@@ -3,7 +3,7 @@ import { useCatalog, clearCatalogCache } from '../../contexts/CatalogContext';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
-import { Plus, Edit2, Trash2, Search, Upload, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Upload, Download, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
 import { getWorkingBackend } from '../../lib/api';
@@ -410,6 +410,30 @@ export const AdminContent: React.FC = () => {
     setDeleteModalOpen(true);
   };
 
+  const handleExportCSV = () => {
+    const fields = ['id', 'chapter_id', 'title', 'title_bn', 'source_type', 'youtube_video_id', 'drive_file_id', 'telegram_channel_id', 'telegram_message_id', 'thumbnail_url', 'duration', 'size_mb', 'display_order', 'is_active'];
+    let tsv = fields.join('\t') + '\n';
+    
+    filteredVideos.forEach(v => {
+      const row = fields.map(f => {
+        let val = (v as any)[f];
+        if (val === null || val === undefined) val = '';
+        return String(val).replace(/\t/g, ' ').replace(/\n/g, ' ');
+      });
+      tsv += row.join('\t') + '\n';
+    });
+    
+    const blob = new Blob([tsv], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'nexusedu_videos_export.tsv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Exported to TSV');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'subjects':
@@ -761,12 +785,18 @@ export const AdminContent: React.FC = () => {
           <p className="text-text-secondary text-sm">Manage subjects, cycles, chapters, and videos</p>
         </div>
         <div className="flex items-center gap-2">
-          {activeTab === 'videos' && (
-            <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsImportModalOpen(true)}>
-              <Upload size={16} />
-              Bulk Import
-            </Button>
-          )}
+              {activeTab === 'videos' && (
+                <Button variant="outline" className="flex items-center gap-2" onClick={handleExportCSV}>
+                  <Download size={16} />
+                  Export to Sheets
+                </Button>
+              )}
+              {activeTab === 'videos' && (
+                <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsImportModalOpen(true)}>
+                  <Upload size={16} />
+                  Sync from Sheets
+                </Button>
+              )}
           <Button className="flex items-center gap-2" onClick={handleAdd}>
             <Plus size={16} />
             Add New {activeTab.slice(0, -1)}
@@ -1119,25 +1149,93 @@ export const AdminContent: React.FC = () => {
                   ))}
                 </select>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">Telegram Channel ID</label>
-                <input
-                  type="text"
-                  value={formData.telegram_channel_id || ''}
-                  onChange={(e) => setFormData({ ...formData, telegram_channel_id: e.target.value })}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">Telegram Message ID</label>
-                <input
-                  type="number"
+                <label className="block text-sm font-medium text-text-primary mb-1">Source Type</label>
+                <select
                   required
-                  value={formData.telegram_message_id || ''}
-                  onChange={(e) => setFormData({ ...formData, telegram_message_id: parseInt(e.target.value) || 0 })}
+                  value={formData.source_type || 'telegram'}
+                  onChange={(e) => setFormData({ ...formData, source_type: e.target.value as any })}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
+                >
+                  <option value="telegram">Telegram</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="drive">Google Drive</option>
+                </select>
               </div>
+
+              {formData.source_type === 'youtube' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1">YouTube Video ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      required
+                      value={formData.youtube_video_id || ''}
+                      onChange={(e) => setFormData({ ...formData, youtube_video_id: e.target.value })}
+                      className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. dQw4w9WgXcQ"
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        if (formData.youtube_video_id) {
+                          setFormData({ 
+                            ...formData, 
+                            thumbnail_url: `https://img.youtube.com/vi/${formData.youtube_video_id}/maxresdefault.jpg` 
+                          });
+                          showToast('Thumbnail auto-fetched');
+                        } else {
+                          showToast('Please enter a YouTube Video ID first');
+                        }
+                      }}
+                    >
+                      Fetch Auto-Thumbnail
+                    </Button>
+                  </div>
+                  <p className="text-xs text-text-secondary mt-1">Found in the URL: youtube.com/watch?v=<strong>ID_HERE</strong></p>
+                </div>
+              )}
+
+              {formData.source_type === 'drive' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1">Google Drive File ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.drive_file_id || ''}
+                    onChange={(e) => setFormData({ ...formData, drive_file_id: e.target.value })}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="e.g. 1ABC123xyz"
+                  />
+                </div>
+              )}
+
+              {(!formData.source_type || formData.source_type === 'telegram') && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">Telegram Channel ID</label>
+                    <input
+                      type="text"
+                      value={formData.telegram_channel_id || ''}
+                      onChange={(e) => setFormData({ ...formData, telegram_channel_id: e.target.value })}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">Telegram Message ID</label>
+                    <input
+                      type="number"
+                      required
+                      value={formData.telegram_message_id || ''}
+                      onChange={(e) => setFormData({ ...formData, telegram_message_id: parseInt(e.target.value) || 0 })}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-1">Duration (e.g., 45:30)</label>
@@ -1448,7 +1546,7 @@ export const AdminContent: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Bulk Import Section (Videos Tab Only) */}
+      {/* Bulk Sync Section (Videos Tab Only) */}
       {activeTab === 'videos' && (
         <div className="mt-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div 
@@ -1456,12 +1554,12 @@ export const AdminContent: React.FC = () => {
             onClick={() => setIsImportModalOpen(!isImportModalOpen)}
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg text-primary">
-                <Upload size={20} />
+              <div className="p-2 bg-green-500/10 rounded-lg text-green-500">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-text-primary">Bulk Import Videos</h2>
-                <p className="text-sm text-text-secondary">Import multiple videos into a specific chapter via JSON</p>
+                <h2 className="text-lg font-bold text-text-primary">Google Sheets Bulk Sync</h2>
+                <p className="text-sm text-text-secondary">Export to TSV, edit in Google Sheets, and paste back here to bulk update videos</p>
               </div>
             </div>
             <div className={`transform transition-transform ${isImportModalOpen ? 'rotate-180' : ''}`}>
@@ -1473,48 +1571,31 @@ export const AdminContent: React.FC = () => {
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-primary mb-1">Target Chapter</label>
-                    <select
-                      value={formData.bulk_chapter_id || ''}
-                      onChange={(e) => setFormData({ ...formData, bulk_chapter_id: e.target.value })}
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="">Select a chapter...</option>
-                      {allChapters.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
+                  <div className="bg-green-50 border border-green-100 rounded-lg p-4 text-sm text-green-800">
                     <h4 className="font-bold mb-2 flex items-center gap-2">
-                      <CheckCircle size={16} /> Expected JSON Format
+                      <CheckCircle size={16} /> How to Sync
                     </h4>
-                    <pre className="text-xs bg-white p-2 rounded border border-blue-100 overflow-x-auto">
-{`[
-  {
-    "title": "Video Title",
-    "telegram_file_id": "...",
-    "telegram_message_id": 123,
-    "display_order": 1
-  }
-]`}
-                    </pre>
+                    <ol className="list-decimal list-inside space-y-2 text-xs">
+                      <li>Click <strong>Export to Sheets</strong> at the top right of the videos panel.</li>
+                      <li>Open the downloaded TSV file in <strong>Google Sheets</strong> or Excel.</li>
+                      <li>Edit video titles, source types, YouTube IDs, etc.</li>
+                      <li>Copy all the cells in Google Sheets (Ctrl+C).</li>
+                      <li>Paste them into the text box here and click <strong>Sync to Database</strong>.</li>
+                    </ol>
                   </div>
                 </div>
                 
                 <div className="md:col-span-2 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-text-primary mb-1">JSON Data</label>
+                    <label className="block text-sm font-medium text-text-primary mb-1">Paste Data from Google Sheets (TSV format)</label>
                     <textarea
                       value={importJson}
                       onChange={(e) => {
                         setImportJson(e.target.value);
                         setImportProgress('');
                       }}
-                      placeholder="Paste JSON array here..."
-                      className="w-full h-48 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="Paste TSV data here..."
+                      className="w-full h-64 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary whitespace-pre"
                       disabled={isImporting}
                     />
                   </div>
@@ -1533,60 +1614,54 @@ export const AdminContent: React.FC = () => {
                   <div className="flex justify-end">
                     <Button 
                       onClick={async () => {
-                        if (!formData.bulk_chapter_id) {
-                          setImportProgress('Error: Please select a target chapter first.');
-                          return;
-                        }
+                        if (!importJson.trim()) return;
                         
                         try {
                           setIsImporting(true);
-                          setImportProgress('Validating JSON...');
+                          setImportProgress('Parsing TSV data...');
                           
-                          let items;
-                          try {
-                            items = JSON.parse(importJson);
-                          } catch {
-                            throw new Error('Invalid JSON format. Please check for syntax errors.');
-                          }
+                          const lines = importJson.trim().split(/\r?\n/);
+                          if (lines.length < 2) throw new Error('No data rows found. Ensure you pasted headers too.');
                           
-                          if (!Array.isArray(items)) {
-                            throw new Error('JSON must be an array of objects.');
-                          }
+                          const headers = lines[0].split('\t').map(h => h.trim());
+                          const dataRows = lines.slice(1).map(line => line.split('\t'));
                           
-                          if (items.length === 0) {
-                            throw new Error('JSON array is empty.');
-                          }
+                          const objectsToUpsert = dataRows.map(row => {
+                            const obj: any = {};
+                            headers.forEach((header, i) => {
+                              let val: any = row[i]?.trim();
+                              if (val === '' || val === 'undefined' || val === 'null') val = null;
+                              else if (val === 'true') val = true;
+                              else if (val === 'false') val = false;
+                              else if (!isNaN(Number(val)) && val !== null) {
+                                // Specific numeric fields
+                                if (['telegram_message_id', 'display_order', 'size_mb', 'duration'].includes(header)) {
+                                  obj[header] = header === 'duration' ? val : Number(val);
+                                } else {
+                                  obj[header] = val; // leave IDs as string
+                                }
+                                return;
+                              }
+                              obj[header] = val;
+                            });
+                            
+                            // Remove empty IDs to allow creating new records
+                            if (!obj.id) delete obj.id;
+                            
+                            return obj;
+                          });
                           
-                          // Validate required fields
-                          for (let i = 0; i < items.length; i++) {
-                            const item = items[i];
-                            if (!item.title) throw new Error(`Item at index ${i} is missing 'title'`);
-                            if (!item.telegram_message_id) throw new Error(`Item at index ${i} is missing 'telegram_message_id'`);
-                          }
+                          setImportProgress(`Validated ${objectsToUpsert.length} rows. Uploading to database...`);
                           
-                          setImportProgress(`Validation passed. Importing ${items.length} videos...`);
-                          
-                          // Get channel ID from chapter
-                          const chapter = allChapters.find(c => c.id === formData.bulk_chapter_id);
-                          const cycle = allCycles.find(c => c.id === chapter?.cycle_id);
-                          const channelId = cycle?.telegram_channel_id || '';
-                          
-                          // Prepare data
-                          const dataToInsert = items.map(item => ({
-                            ...item,
-                            chapter_id: formData.bulk_chapter_id,
-                            telegram_channel_id: channelId,
-                            is_active: true
-                          }));
-                          
-                          const { error } = await supabase.from('videos').insert(dataToInsert);
+                          // Use upsert to handle both inserts and updates
+                          const { error } = await supabase.from('videos').upsert(objectsToUpsert, { onConflict: 'id' });
                           
                           if (error) throw error;
                           
-                          setImportProgress(`Successfully imported ${items.length} videos! Refreshing catalog...`);
+                          setImportProgress(`Successfully synced ${objectsToUpsert.length} videos! Refreshing catalog...`);
                           await refreshCatalog();
                           
-                          showToast(`Successfully imported ${items.length} videos`);
+                          showToast(`Successfully synced ${objectsToUpsert.length} videos`);
                           setImportJson('');
                           setTimeout(() => {
                             setImportProgress('');
@@ -1603,10 +1678,10 @@ export const AdminContent: React.FC = () => {
                       disabled={isImporting || !importJson.trim()}
                       className="flex items-center gap-2"
                     >
-                      {isImporting ? 'Importing...' : (
+                      {isImporting ? 'Syncing...' : (
                         <>
-                          <Upload size={16} />
-                          Validate & Import
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+                          Sync to Database
                         </>
                       )}
                     </Button>

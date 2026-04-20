@@ -33,8 +33,11 @@ export interface Chapter {
 export interface Video {
   id: string; chapter_id: string; title: string; title_bn?: string;
   description?: string; description_bn?: string;
-  telegram_channel_id: string; telegram_message_id: number;
-  duration?: string; size_mb?: number; thumbnail_url?: string;
+  source_type?: 'telegram' | 'youtube' | 'drive';
+  source_url?: string;
+  youtube_video_id?: string; drive_file_id?: string;
+  telegram_channel_id?: string; telegram_message_id?: number;
+  duration?: string; size_mb?: number; file_size_bytes?: number; mime_type?: string; thumbnail_url?: string;
   display_order: number; is_active: boolean; created_at: string; updated_at?: string;
 }
 
@@ -91,7 +94,7 @@ export interface ChapterAccess {
   blocked_reason?: string; blocked_at?: string;
 }
 
-export interface CatalogVideo { id: string; chapter_id?: string; title: string; title_bn?: string; duration?: string; size_mb?: number; display_order?: number; telegram_message_id?: number; is_active?: boolean; }
+export interface CatalogVideo { id: string; chapter_id?: string; title: string; title_bn?: string; duration?: string; size_mb?: number; display_order?: number; telegram_message_id?: number; is_active?: boolean; source_type?: 'telegram' | 'youtube' | 'drive'; youtube_video_id?: string; drive_file_id?: string; }
 export interface CatalogChapter { id: string; cycle_id?: string; name: string; name_bn?: string; requires_enrollment: boolean; display_order: number; videos: CatalogVideo[]; }
 export interface CatalogCycle { id: string; name: string; name_bn?: string; display_order: number; telegram_channel_id?: string; chapters: CatalogChapter[]; }
 export interface CatalogSubject { id: string; name: string; name_bn?: string; slug: string; thumbnail_color?: string; color?: string; description?: string; display_order: number; cycles: CatalogCycle[]; }

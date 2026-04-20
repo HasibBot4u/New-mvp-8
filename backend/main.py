@@ -271,18 +271,21 @@ async def refresh_catalog():
 
     try:
         async with httpx.AsyncClient() as client:
-            subjects = await fetch_supabase(
-                "subjects?is_active=eq.true&order=display_order", client)
-            cycles   = await fetch_supabase(
-                "cycles?is_active=eq.true&order=display_order", client)
-            chapters = await fetch_supabase(
-                "chapters?is_active=eq.true&order=display_order", client)
-            videos   = await fetch_all_videos(client)
+            subjects_task = fetch_supabase("subjects?is_active=eq.true&order=display_order", client)
+            cycles_task   = fetch_supabase("cycles?is_active=eq.true&order=display_order", client)
+            chapters_task = fetch_supabase("chapters?is_active=eq.true&order=display_order", client)
+            videos_task   = fetch_all_videos(client)
+
+            subjects, cycles, chapters, videos = await asyncio.gather(
+                subjects_task, cycles_task, chapters_task, videos_task
+            )
 
         # Build video_map for O(1) stream lookups
         new_map = {}
         for v in videos:
             new_map[v["id"]] = {
+                "source_type": v.get("source_type", "telegram"),
+                "drive_file_id": v.get("drive_file_id", ""),
                 "channel_id": v.get("telegram_channel_id", ""),
                 "message_id": v.get("telegram_message_id", 0),
             }
@@ -716,13 +719,26 @@ async def stream_video(video_id: str, request: Request):
     if video_id not in video_map:
         raise HTTPException(404, "Video not found")
 
+    info       = video_map[video_id]
+    
+    # Handle non-telegram sources explicitly
+    source_type = info.get("source_type", "telegram")
+    if source_type == "youtube":
+        raise HTTPException(400, "YouTube videos stream directly on client")
+    elif source_type == "drive":
+        drive_file_id = info.get("drive_file_id")
+        if not drive_file_id:
+            raise HTTPException(400, "Drive file ID missing")
+        worker_url = os.environ.get("VITE_CLOUDFLARE_WORKER_URL", "https://nexusedu-proxy.mdhosainp414.workers.dev")
+        return RedirectResponse(url=f"{worker_url}/{video_id}", status_code=302)
+
+    # TELEGRAM LOGIC
     connected = await ensure_telegram_connected()
     if not connected:
         raise HTTPException(503, 
             "Telegram client is not connected. "
             "The server is reconnecting. Please retry in 30 seconds.")
 
-    info       = video_map[video_id]
     channel_id_str = info.get("channel_id", "")
     message_id_str = info.get("message_id", 0)
 

@@ -29,6 +29,8 @@ export const AdminSystem: React.FC = () => {
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [registrationsOpen, setRegistrationsOpen] = useState(true);
+  const [brandName, setBrandName] = useState('NexusEdu');
+  const [brandColor, setBrandColor] = useState('#4F46E5');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -37,8 +39,12 @@ export const AdminSystem: React.FC = () => {
           .from('system_settings')
           .select('key, value');
         if (data && !error) {
-          setRegistrationsOpen(data.find(x => x.key === 'registrations_open')?.value === 'true');
+          setRegistrationsOpen(data.find(x => x.key === 'registrations_open')?.value !== 'false');
           setMaintenanceMode(data.find(x => x.key === 'maintenance_mode')?.value === 'true');
+          const name_val = data.find(x => x.key === 'platform_name')?.value;
+          if (name_val) setBrandName(name_val);
+          const color_val = data.find(x => x.key === 'brand_color')?.value;
+          if (color_val) setBrandColor(color_val);
         }
       } catch (err) {
         console.error('Error fetching settings:', err);
@@ -152,6 +158,24 @@ export const AdminSystem: React.FC = () => {
       console.error('Error updating registrations setting:', err);
       showToast('Failed to update registrations setting');
       setRegistrationsOpen(!newValue); // Revert on failure
+    }
+  };
+
+  const handleSaveBranding = async () => {
+    setIsActionLoading('branding');
+    try {
+      // Upsert brand_name
+      await supabase.from('system_settings').upsert({ key: 'platform_name', value: brandName });
+      // Upsert brand_color
+      await supabase.from('system_settings').upsert({ key: 'brand_color', value: brandColor });
+      
+      await refreshSettings();
+      showToast('Branding updated successfully!');
+    } catch (err) {
+      console.error('Error saving branding', err);
+      showToast('Failed to update branding settings');
+    } finally {
+      setIsActionLoading(null);
     }
   };
 
@@ -334,6 +358,52 @@ export const AdminSystem: React.FC = () => {
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${registrationsOpen ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Branding Configuration */}
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-lg font-bold text-text-primary flex items-center gap-2 mb-4">
+            <SettingsIcon className="w-5 h-5 text-primary" />
+            Branding Configuration
+          </h2>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1">Platform Name</label>
+              <input 
+                type="text" 
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="e.g. NexusEdu"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1">Brand Color (Hex)</label>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="color" 
+                  value={brandColor}
+                  onChange={(e) => setBrandColor(e.target.value)}
+                  className="w-10 h-10 rounded border-0 cursor-pointer"
+                />
+                <input 
+                  type="text" 
+                  value={brandColor}
+                  onChange={(e) => setBrandColor(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary uppercase font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="#4F46E5"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleSaveBranding}
+              disabled={isActionLoading === 'branding'}
+              className="w-full py-2 mt-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-hover transition-colors text-sm disabled:opacity-50"
+            >
+              {isActionLoading === 'branding' ? 'Saving...' : 'Save Branding'}
+            </button>
           </div>
         </div>
 

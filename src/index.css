@@ -27,4 +27,22 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  
+  .watermark-diagonal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15rem;
+    padding: 10%;
+    transform: rotate(-30deg) scale(1.5);
+    white-space: nowrap;
+    opacity: 0.15;
+    pointer-events: none;
+    user-select: none;
+    animation: drift 60s linear infinite;
+  }
+
+  @keyframes drift {
+    0% { transform: rotate(-30deg) scale(1.5) translate(0, 0); }
+    100% { transform: rotate(-30deg) scale(1.5) translate(-20%, -20%); }
+  }
 }

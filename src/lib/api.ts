@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 async function fetchWithTimeout(url: string, ms: number, options?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
@@ -59,14 +61,36 @@ export async function refreshCatalog(): Promise<void> {
   try { await fetchWithTimeout(`${backend}/api/refresh`, 15000); } catch { /* ignore */ }
 }
 
-export async function getStreamUrl(videoId: string): Promise<string> {
-  const cloudflareWorkerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
-  if (cloudflareWorkerUrl) {
-    const baseUrl = cloudflareWorkerUrl.replace(/\/$/, '');
-    return `${baseUrl}/api/stream/${videoId}`;
+export async function getStreamUrl(videoId: string): Promise<string | null> {
+  try {
+    // Fetch video metadata first via Supabase since there's no backend endpoint for a single video
+    const { data: video, error } = await supabase
+      .from('videos')
+      .select('*')
+      .eq('id', videoId)
+      .single();
+
+    if (error || !video) {
+      console.error('Error getting video metadata from Supabase:', error);
+      return null;
+    }
+
+    // Determine correct streaming URL based on source
+    if (!video.source_type || video.source_type === 'telegram') {
+      // Format: https://worker-url/telegram/{channel_id}/{message_id}
+      // Note: channel_id MUST include the minus sign (e.g., -1003569793885)
+      return `https://nexusedu-proxy.mdhosainp414.workers.dev/telegram/${video.telegram_channel_id}/${video.telegram_message_id}`;
+    } else if (video.source_type === 'drive') {
+      return `https://nexusedu-proxy.mdhosainp414.workers.dev/drive/${video.drive_file_id}`;
+    } else if (video.source_type === 'youtube') {
+      return `https://www.youtube.com/embed/${video.youtube_video_id}?autoplay=1&controls=0&modestbranding=1&rel=0&disablekb=1`;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting stream URL:', error);
+    return null;
   }
-  const backend = await getWorkingBackend();
-  return `${backend}/api/stream/${videoId}`;
 }
 
 export async function prefetchVideo(videoId: string): Promise<void> {
@@ -89,7 +113,7 @@ export const api = {
   fetchBackendHealth,
   getCatalogWithCache: async () => {
     const backend = await getWorkingBackend();
-    const r = await fetchWithTimeout(`${backend}/api/catalog`, 20000);
+    const r = await fetchWithTimeout(`${backend}/api/catalog`, 40000);
     if (!r.ok) throw new Error('Failed to fetch catalog');
     return r.json();
   },

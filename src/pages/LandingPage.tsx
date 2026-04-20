@@ -2,9 +2,12 @@ import { Link } from 'react-router-dom';
 import { Play, UserPlus, BookOpen, CheckCircle2, Atom, Beaker, Calculator } from 'lucide-react';
 import { NexusLogo } from '../components/shared/NexusLogo';
 import { useAuth } from '../contexts/AuthContext';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 export function LandingPage() {
   const { user, isLoading } = useAuth();
+  const { settings } = useSystemSettings();
+  const brandName = settings?.platform_name || 'NexusEdu';
 
   return (
     <div className="min-h-screen bg-white font-sans">
@@ -85,7 +88,7 @@ export function LandingPage() {
             <div className="hidden lg:block relative perspective-1000">
               <div className="transform rotate-y-[-10deg] rotate-x-[5deg] shadow-2xl rounded-2xl bg-white p-6 border border-white/20">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs font-bold text-gray-400 tracking-wider uppercase">NexusEdu</span>
+                  <span className="text-xs font-bold text-gray-400 tracking-wider uppercase">{brandName}</span>
                   <div className="flex gap-1.5">
                     <div className="w-3 h-3 rounded-full bg-red-400" />
                     <div className="w-3 h-3 rounded-full bg-amber-400" />
@@ -227,10 +230,10 @@ export function LandingPage() {
       </section>
 
       {/* WHY NEXUSEDU SECTION */}
-      <section className="py-20 bg-indigo-900 text-white">
+      <section className="py-20 bg-indigo-900 text-white" style={{backgroundColor: 'var(--primary-color-dark)', backgroundImage: 'linear-gradient(to bottom, var(--primary-color), var(--primary-color-dark))'}}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold bangla mb-4">কেন NexusEdu বেছে নেবে?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold bangla mb-4">কেন {brandName} বেছে নেবে?</h2>
             <div className="w-24 h-1.5 bg-amber-500 mx-auto rounded-full" />
           </div>
 
@@ -266,9 +269,9 @@ export function LandingPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
-                <span className="text-2xl font-bold text-white tracking-tight">NexusEdu</span>
+                <span className="text-2xl font-bold text-white tracking-tight">{brandName}</span>
               </div>
-              <p className="text-indigo-200 bangla max-w-xs">
+              <p className="text-white/70 bangla max-w-xs">
                 তোমার শিক্ষার নতুন দিগন্ত। HSC পরীক্ষার সেরা প্রস্তুতির জন্য আজই যুক্ত হও।
               </p>
             </div>
@@ -286,17 +289,17 @@ export function LandingPage() {
             {/* Right */}
             <div>
               <h4 className="text-white font-bold bangla mb-6 uppercase tracking-wider text-sm">যোগাযোগ</h4>
-              <ul className="space-y-3 text-indigo-200 bangla">
-                <li>ইমেইল: support@nexusedu.com</li>
+              <ul className="space-y-3 text-white/70 bangla">
+                <li>ইমেইল: support@{brandName.toLowerCase()}.com</li>
                 <li>ফোন: +880 1XXX XXXXXX</li>
                 <li>ঠিকানা: ঢাকা, বাংলাদেশ</li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-8 border-t border-indigo-900/50 text-center">
-            <p className="text-indigo-300 bangla text-sm">
-              © ২০২৫ NexusEdu. সর্বস্বত্ব সংরক্ষিত।
+          <div className="pt-8 border-t border-white/10 text-center">
+            <p className="text-white/50 bangla text-sm">
+              © ২০২৫ {brandName}. সর্বস্বত্ব সংরক্ষিত।
             </p>
           </div>
         </div>

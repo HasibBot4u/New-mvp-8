@@ -11,13 +11,17 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { SEO } from '../components/SEO';
 import { setPageTitle } from '../utils/setPageTitle';
 import { StudentLayout } from '../components/layout/StudentLayout';
+import { YouTubeStealthPlayer } from '../components/YouTubeStealthPlayer';
 import { motion } from 'framer-motion';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 export function PlayerPage() {
   const { videoId } = useParams<{ videoId: string }>();
   const navigate = useNavigate();
   const { catalog, isLoading } = useCatalog();
   const { user, profile } = useAuth();
+  const { settings } = useSystemSettings();
+  const brandName = settings?.platform_name || 'NexusEdu';
   const [isCompleted, setIsCompleted] = useState(false);
   const [completedVideoIds, setCompletedVideoIds] = useState<Set<string>>(new Set());
 
@@ -35,7 +39,27 @@ export function PlayerPage() {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    
+    // Anti-DevTools Protection
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F12
+      if (e.key === 'F12') e.preventDefault();
+      // Ctrl+Shift+I (Windows) or Cmd+Opt+I (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) e.preventDefault();
+      // Ctrl+U (Windows) or Cmd+Opt+U (Mac) - View Source
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) e.preventDefault();
+      // Ctrl+Shift+J or Cmd+Opt+J - Console
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) e.preventDefault();
+      // Ctrl+Shift+C or Cmd+Opt+C - Element Inspector
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) e.preventDefault();
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => { 
+      mountedRef.current = false; 
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Fetch notes and bookmarks from Supabase on load
@@ -356,13 +380,38 @@ export function PlayerPage() {
         </div>
 
         {/* Video Player Area */}
-        <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl mb-6 border border-gray-800">
+        <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl mb-6 border border-gray-800 aspect-video relative group">
+          
+          {/* Anti-Piracy Watermark Overlay */}
+          <div className="pointer-events-none absolute inset-0 z-50 overflow-hidden opacity-20 select-none flex items-center justify-center">
+            <div className="watermark-diagonal text-white text-2xl font-bold font-mono tracking-wider">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <span key={i}>{user?.email || profile?.display_name || brandName} &bull; </span>
+              ))}
+            </div>
+          </div>
+
           <ErrorBoundary>
-            <VideoPlayer 
-              videoId={video.id} 
-              sizeMb={video.size_mb}
-              onTimeUpdate={(time) => setCurrentVideoTime(time)}
-            />
+            {video.source_type === 'youtube' && video.youtube_video_id ? (
+              <div 
+                className="w-full h-full"
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <YouTubeStealthPlayer
+                  videoId={video.youtube_video_id}
+                  onTimeUpdate={(time) => setCurrentVideoTime(time)}
+                  onEnded={() => handleComplete(video.id, true)}
+                />
+              </div>
+            ) : (
+              <div onContextMenu={(e) => e.preventDefault()} className="w-full h-full">
+                <VideoPlayer 
+                  videoId={video.id} 
+                  sizeMb={video.size_mb}
+                  onTimeUpdate={(time) => setCurrentVideoTime(time)}
+                />
+              </div>
+            )}
           </ErrorBoundary>
         </div>
 

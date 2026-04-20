@@ -1,13 +1,21 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, Bell, User } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Bell, User, Settings } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function BottomNav() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
+
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'হোম' },
     { to: '/courses', icon: BookOpen, label: 'বিষয়সমূহ' },
     { to: '/notifications', icon: Bell, label: 'নোটিফিকেশন' },
     { to: '/profile', icon: User, label: 'প্রোফাইল' },
   ];
+
+  if (isAdmin) {
+    navItems.push({ to: '/admin/dashboard', icon: Settings, label: 'অ্যাডমিন' });
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-50 md:hidden">
@@ -22,7 +30,7 @@ export default function BottomNav() {
               }`
             }
           >
-            <Icon className="w-6 h-6" />
+            <Icon className="w-5 h-5" />
             <span className="text-[10px] font-medium bangla">{label}</span>
           </NavLink>
         ))}

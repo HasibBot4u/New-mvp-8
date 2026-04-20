@@ -156,10 +156,9 @@ export const AdminUsers: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('watch_history')
-        .select('video_id, progress_seconds, completed, watch_count, watched_at, videos(title, title_bn)')
+        .select('video_id, progress_percent, progress_seconds, completed, watch_count, watched_at, videos(title, title_bn)')
         .eq('user_id', userId)
-        .order('watched_at', { ascending: false })
-        .limit(20);
+        .order('watched_at', { ascending: false });
         
       if (error) throw error;
       setWatchHistoryData(data || []);
@@ -379,7 +378,11 @@ export const AdminUsers: React.FC = () => {
                           <div className="fixed inset-0 z-10" onClick={() => setActionMenuOpen(null)} />
                           <div className="absolute right-8 top-8 w-48 bg-surface border border-border rounded-lg shadow-xl z-20 py-1 overflow-hidden">
                             <button 
-                              onClick={() => { setUserDetailsModal(user); setActionMenuOpen(null); }}
+                              onClick={() => { 
+                                setUserDetailsModal(user); 
+                                fetchWatchHistory(user.id);
+                                setActionMenuOpen(null); 
+                              }}
                               className="w-full text-left px-4 py-2 text-xs text-text-primary hover:bg-background flex items-center gap-2"
                             >
                               <Eye className="w-3.5 h-3.5" /> View Full Details
@@ -587,15 +590,23 @@ export const AdminUsers: React.FC = () => {
                 </div>
                 <div className="bg-background border border-border rounded-lg p-4">
                   <div className="text-text-secondary text-xs mb-1">Last Active</div>
-                  <div className="font-medium text-text-primary">-</div>
+                  <div className="font-medium text-text-primary">
+                    {watchHistoryData.length > 0 
+                      ? new Date(Math.max(...watchHistoryData.map(r => new Date(r.watched_at).getTime()))).toLocaleDateString()
+                      : '-'}
+                  </div>
                 </div>
                 <div className="bg-background border border-border rounded-lg p-4">
-                  <div className="text-text-secondary text-xs mb-1">Videos Watched</div>
-                  <div className="font-medium text-text-primary">-</div>
+                  <div className="text-text-secondary text-xs mb-1">Videos Started / Completed</div>
+                  <div className="font-medium text-text-primary">
+                    {watchHistoryData.length} / {watchHistoryData.filter(r => r.completed || r.progress_percent >= 90).length}
+                  </div>
                 </div>
                 <div className="bg-background border border-border rounded-lg p-4">
                   <div className="text-text-secondary text-xs mb-1">Total Watch Time</div>
-                  <div className="font-medium text-text-primary">-</div>
+                  <div className="font-medium text-text-primary">
+                    {formatWatchTime(watchHistoryData.reduce((acc, curr) => acc + curr.progress_seconds, 0))}
+                  </div>
                 </div>
               </div>
 
@@ -635,16 +646,38 @@ export const AdminUsers: React.FC = () => {
                   <thead className="bg-background text-xs uppercase text-text-primary border-b border-border sticky top-0 z-10">
                     <tr>
                       <th className="px-6 py-3">Video Title</th>
+                      <th className="px-6 py-3">Status</th>
+                      <th className="px-6 py-3">Completion</th>
                       <th className="px-6 py-3">Watch Time</th>
+                      <th className="px-6 py-3">Sessions</th>
                       <th className="px-6 py-3">Last Watched</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {watchHistoryData.map((record) => (
-                      <tr key={record.id} className="border-b border-border hover:bg-surface/50">
-                        <td className="px-6 py-4 font-medium text-text-primary">{record.videos?.title || 'Unknown Video'}</td>
-                        <td className="px-6 py-4">{formatWatchTime(record.progress_seconds)}</td>
-                        <td className="px-6 py-4">{new Date(record.watched_at).toLocaleString()}</td>
+                    {watchHistoryData.map((record, index) => (
+                      <tr key={record.id || index} className="border-b border-border hover:bg-surface/50">
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-text-primary">{record.videos?.title || 'Unknown Video'}</div>
+                          {record.videos?.title_bn && <div className="text-xs text-text-muted bangla">{record.videos.title_bn}</div>}
+                        </td>
+                        <td className="px-6 py-4">
+                          {(record.completed || record.progress_percent >= 90) ? (
+                            <Badge variant="default" className="bg-green-500/10 text-green-500 text-[10px]">Completed</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 text-[10px]">In Progress</Badge>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-background rounded-full overflow-hidden w-20">
+                               <div className="h-full bg-primary" style={{ width: `${Math.min(100, record.progress_percent || 0)}%` }} />
+                            </div>
+                            <span className="text-xs font-mono">{Math.floor(record.progress_percent || 0)}%</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs">{formatWatchTime(record.progress_seconds)}</td>
+                        <td className="px-6 py-4 font-mono text-xs">{record.watch_count}x</td>
+                        <td className="px-6 py-4 text-xs whitespace-nowrap">{new Date(record.watched_at).toLocaleDateString()} <br/><span className="text-text-muted">{new Date(record.watched_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></td>
                       </tr>
                     ))}
                   </tbody>

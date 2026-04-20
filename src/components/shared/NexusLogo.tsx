@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface NexusLogoProps {
   className?: string;
@@ -7,6 +8,9 @@ interface NexusLogoProps {
 }
 
 export const NexusLogo: React.FC<NexusLogoProps> = ({ className = '', withSubtitle = true }) => {
+  const { settings } = useSystemSettings();
+  const brandName = settings?.platform_name || 'NexusEdu';
+
   return (
     <Link to="/" className={`flex flex-col items-start ${className}`}>
       <div className="flex items-center gap-2">
@@ -27,7 +31,7 @@ export const NexusLogo: React.FC<NexusLogoProps> = ({ className = '', withSubtit
           </svg>
         </div>
         <span className="text-2xl font-bold text-primary-dark tracking-tight">
-          NexusEdu
+          {brandName}
         </span>
       </div>
       {withSubtitle && (

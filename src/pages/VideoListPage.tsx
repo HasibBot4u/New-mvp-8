@@ -168,8 +168,9 @@ export function VideoListPage() {
               >
                 <div className="relative h-48 bg-slate-100 overflow-hidden">
                   <img 
-                    src={`https://picsum.photos/seed/${video.id}/600/400`}
+                    src={video.thumbnail_url || `https://picsum.photos/seed/${video.id}/600/400`}
                     alt={video.title}
+                    loading="lazy"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
                     referrerPolicy="no-referrer"
                   />

@@ -6,10 +6,10 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#4F46E5', // indigo-600
-          dark: '#3730A3', // indigo-800
+          DEFAULT: 'var(--primary-color, #4F46E5)', // dynamic brand color
+          dark: 'var(--primary-color-dark, #3730A3)',
           light: '#EEF2FF', // indigo-50
-          hover: '#4338CA', // indigo-700
+          hover: 'var(--primary-color-dark, #4338CA)',
         },
         accent: {
           DEFAULT: '#F59E0B', // amber-500

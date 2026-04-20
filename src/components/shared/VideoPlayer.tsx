@@ -127,6 +127,9 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       if (!mountedRef.current) return;
 
       const streamUrl = await getStreamUrl(videoId);
+      if (!streamUrl) {
+        throw new Error("ভিডিও স্ট্রিম লিঙ্ক পাওয়া যায়নি");
+      }
       vid.preload = 'metadata';
       vid.src = streamUrl;
       vid.load();
@@ -192,6 +195,57 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
         setShowResumePrompt(false);
       }
     });
+
+    // Disable DevTools inspection via keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+        (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+      ) {
+        e.preventDefault();
+        return false;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Screen Recording Detection (Blank Canvas heuristic)
+    const detectionInterval = setInterval(() => {
+      const video = videoRef.current;
+      if (video && !video.paused && video.currentTime > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 300;
+          canvas.height = video.videoHeight || 150;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let blankPixels = 0;
+            // sample every 400th pixel (100th pixel to save CPU)
+            for (let i = 0; i < imageData.data.length; i += 400) {
+              if (imageData.data[i] === 0 && 
+                  imageData.data[i+1] === 0 && 
+                  imageData.data[i+2] === 0) {
+                blankPixels++;
+              }
+            }
+            if (blankPixels > (imageData.data.length / 400) * 0.95) {
+              // 95%+ black pixels detected while playing, likely screen recording 
+              // video.pause();
+              // alert('Screen recording implies pirated usage. Paused.');
+            }
+          }
+        } catch (_) {
+          // ignore CORS issues with canvas
+        }
+      }
+    }, 2000);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      clearInterval(detectionInterval);
+    };
   }, [videoId, loadProgressFromSupabase]);
 
   const formatTime = (time: number) => {
@@ -474,6 +528,8 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
         playsInline
         preload="metadata"
         className="w-full h-full object-contain"
+        controlsList="nodownload noremoteplayback"
+        disablePictureInPicture
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={handleDurationChange}
         onLoadedMetadata={handleLoadedMetadata}
@@ -642,6 +698,14 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
           </div>
 
           <div className="flex items-center gap-4">
+            {/* NexusEdu Branding */}
+            <div className="hidden sm:flex items-center gap-2 mr-2 select-none pointer-events-none opacity-80">
+              <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-[10px]">NE</span>
+              </div>
+              <span className="text-white font-semibold text-sm tracking-wide">NexusEdu</span>
+            </div>
+
             <div className="relative">
               <button 
                 onClick={() => setShowSpeedMenu(!showSpeedMenu)}

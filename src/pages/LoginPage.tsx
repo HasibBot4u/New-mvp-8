@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Navigate, useLocation, Link } from 'react-router-dom';
 import { supabase, logActivity } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { setPageTitle } from '../utils/setPageTitle';
 import { Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import { NexusLogo } from '../components/shared/NexusLogo';
@@ -16,10 +17,12 @@ export const LoginPage: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { settings } = useSystemSettings();
+  const brandName = settings?.platform_name || 'NexusEdu';
   
   useEffect(() => { 
-    setPageTitle('লগইন - NexusEdu'); 
-  }, []);
+    setPageTitle(`লগইন - ${brandName}`); 
+  }, [brandName]);
 
   useEffect(() => {
     setError(null);

@@ -53,9 +53,47 @@ export const AdminLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] bg-background">
+    <div className="flex flex-col md:flex-row min-h-screen pb-16 md:pb-0 bg-background">
+      {/* Mobile Header Nav */}
+      <div className="md:hidden flex flex-col border-b border-border bg-surface">
+        <div className="flex items-center gap-3 p-4 border-b border-border">
+          <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold">
+            {profile?.display_name?.charAt(0).toUpperCase() || 'A'}
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-text-primary">{profile?.display_name || 'Admin'}</h2>
+          </div>
+        </div>
+        <nav className="flex overflow-x-auto p-2 gap-2 hide-scrollbar">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                `flex-shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-background text-text-secondary border border-border'
+                }`
+              }
+            >
+              <item.icon size={14} />
+              {item.label}
+            </NavLink>
+          ))}
+          <NavLink
+            to="/"
+            className="flex-shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 border border-red-100"
+          >
+            <ArrowLeft size={14} />
+            Exit Admin
+          </NavLink>
+        </nav>
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 border-r border-border bg-surface hidden md:flex flex-col">
+      <aside className="w-64 shrink-0 border-r border-border bg-surface hidden md:flex flex-col min-h-screen">
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="relative">

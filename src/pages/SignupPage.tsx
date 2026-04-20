@@ -4,10 +4,14 @@ import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LoadingSpinner } from '../components/shared/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
+import { setPageTitle } from '../utils/setPageTitle';
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { settings } = useSystemSettings();
+  const brandName = settings?.platform_name || 'NexusEdu';
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,6 +41,10 @@ export default function SignupPage() {
       return 'নতুন রেজিস্ট্রেশন সাময়িকভাবে বন্ধ আছে।';
     return msg;
   };
+
+  React.useEffect(() => {
+    setPageTitle(`নতুন অ্যাকাউন্ট - ${brandName}`);
+  }, [brandName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +105,14 @@ export default function SignupPage() {
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
-              <span className="text-3xl font-bold text-white">N</span>
+            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
+              <span className="text-3xl font-bold text-white tracking-tight">
+                {brandName.charAt(0)}
+              </span>
             </div>
           </div>
           <h2 className="mt-2 text-3xl font-bold text-gray-900 bangla">
-            NexusEdu
+            {brandName}
           </h2>
           <p className="mt-2 text-sm text-gray-600 bangla">
             নতুন একাউন্ট তৈরি করুন
