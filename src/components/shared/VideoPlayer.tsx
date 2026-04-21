@@ -210,7 +210,7 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       }
     });
 
-    // Disable DevTools inspection via keyboard shortcuts
+    // Basic keyboard shortcut blocking (DevTools)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === 'F12' ||
@@ -223,42 +223,8 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
     };
     document.addEventListener('keydown', handleKeyDown);
 
-    // Screen Recording Detection (Blank Canvas heuristic)
-    const detectionInterval = setInterval(() => {
-      const video = videoRef.current;
-      if (video && !video.paused && video.currentTime > 0) {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth || 300;
-          canvas.height = video.videoHeight || 150;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            let blankPixels = 0;
-            // sample every 400th pixel (100th pixel to save CPU)
-            for (let i = 0; i < imageData.data.length; i += 400) {
-              if (imageData.data[i] === 0 && 
-                  imageData.data[i+1] === 0 && 
-                  imageData.data[i+2] === 0) {
-                blankPixels++;
-              }
-            }
-            if (blankPixels > (imageData.data.length / 400) * 0.95) {
-              // 95%+ black pixels detected while playing, likely screen recording 
-              // video.pause();
-              // alert('Screen recording implies pirated usage. Paused.');
-            }
-          }
-        } catch (_) {
-          // ignore CORS issues with canvas
-        }
-      }
-    }, 2000);
-
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      clearInterval(detectionInterval);
     };
   }, [videoId, loadProgressFromSupabase]);
 

@@ -12,7 +12,7 @@ interface CatalogContextType {
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
-const CACHE_KEY = 'nexusedu_catalog_v3';
+const CACHE_KEY = `nexusedu_catalog_v${import.meta.env.VITE_BUILD_TIME || Date.now()}`;
 const CACHE_TTL = 10 * 60 * 1000;
 
 export const clearCatalogCache = () => {

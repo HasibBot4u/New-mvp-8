@@ -247,6 +247,7 @@ async def fetch_all_videos(client: httpx.AsyncClient) -> list:
         url = (
             f"{SUPABASE_URL}/rest/v1/videos"
             f"?is_active=eq.true&order=display_order"
+            f"&select=id,chapter_id,title,telegram_channel_id,telegram_message_id,source_type,drive_file_id,youtube_video_id,size_mb,duration,display_order"
             f"&offset={offset}&limit=1000"
         )
         r = await client.get(url, headers=headers, timeout=30)
@@ -350,17 +351,28 @@ async def ensure_telegram_connected() -> bool:
     # Use cached result if checked recently and it was good
     if _tg_check_ok and (now - _tg_check_ts) < 20:
         return True
+    
     # Check primary client
-    if tg is not None and getattr(tg, 'is_connected', False):
-        _tg_check_ok = True
-        _tg_check_ts = now
-        return True
+    if tg is not None:
+        try:
+            if tg.is_connected:
+                _tg_check_ok = True
+                _tg_check_ts = now
+                return True
+        except Exception:
+            pass
+            
     # Check secondary client
-    if tg2 is not None and getattr(tg2, 'is_connected', False):
-        print("[NexusEdu] Primary down, secondary client is connected.", flush=True)
-        _tg_check_ok = True
-        _tg_check_ts = now
-        return True
+    if tg2 is not None:
+        try:
+            if tg2.is_connected:
+                print("[NexusEdu] Primary down, secondary client is connected.", flush=True)
+                _tg_check_ok = True
+                _tg_check_ts = now
+                return True
+        except Exception:
+            pass
+            
     # Need to reconnect primary
     print("[NexusEdu] Telegram disconnected — reconnecting...", flush=True)
     try:
@@ -473,8 +485,6 @@ async def lifespan(app: FastAPI):
 # ─── APP ──────────────────────────────────────────────────────
 app = FastAPI(title="NexusEdu Backend", lifespan=lifespan)
 
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -490,10 +500,14 @@ app.add_middleware(
 # ─── STREAMING CORE ───────────────────────────────────────────
 def get_active_client() -> Optional[Client]:
     """Return the first connected Telegram client available."""
-    if tg is not None and getattr(tg, 'is_connected', False):
-        return tg
-    if tg2 is not None and getattr(tg2, 'is_connected', False):
-        return tg2
+    if tg is not None:
+        try:
+            if tg.is_connected: return tg
+        except Exception: pass
+    if tg2 is not None:
+        try:
+            if tg2.is_connected: return tg2
+        except Exception: pass
     return tg  # Return primary even if disconnected (will trigger reconnect)
 
 async def _stream_telegram(
@@ -566,7 +580,7 @@ async def health():
     is_conn = False
     try:
         if tg is not None:
-            is_conn = bool(getattr(tg, 'is_connected', False))
+            is_conn = bool(tg.is_connected)
     except Exception:
         pass
     
@@ -577,7 +591,10 @@ async def health():
     
     tg2_status = "not_configured"
     if SESSION_STRING_2:
-        tg2_status = "connected" if (tg2 is not None and getattr(tg2, 'is_connected', False)) else "disconnected"
+        try:
+            tg2_status = "connected" if (tg2 is not None and tg2.is_connected) else "disconnected"
+        except Exception:
+            tg2_status = "disconnected"
     
     return JSONResponse({
         "status": overall,
