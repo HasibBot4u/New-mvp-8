@@ -69,8 +69,13 @@ export const getStreamUrl = (video: any): string => {
   if (sourceType === 'telegram') {
     // Use backend MTProto streamer (bypasses 20MB limit)
     let url = `${baseUrl}/api/stream/${video.id}`;
-    if (video.channel_id && video.message_id) {
-       url += `?c=${video.channel_id}&m=${video.message_id}`;
+    
+    // Check both standard and legacy 'telegram_' prefixed field names from backend/Supabase
+    const channelId = video.channel_id || video.telegram_channel_id;
+    const messageId = video.message_id || video.telegram_message_id;
+    
+    if (channelId && messageId) {
+       url += `?c=${channelId}&m=${messageId}`;
     }
     return url;
   } else if (sourceType === 'drive') {

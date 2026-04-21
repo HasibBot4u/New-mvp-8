@@ -800,9 +800,6 @@ async def stream_video(video_id: str, request: Request, c: str = None, m: str = 
         if not connected:
             raise HTTPException(status_code=503, detail="Telegram client is not connected.")
 
-        channel_id_str = video.get("channel_id", "")
-        message_id_str = video.get("message_id", 0)
-
         if not channel_id_str or not message_id_str:
             raise HTTPException(status_code=400, detail="Video not linked to Telegram")
 
