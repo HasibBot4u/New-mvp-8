@@ -65,7 +65,11 @@ export const getStreamUrl = (video: any): string => {
   
   if (video.source_type === 'telegram') {
     // Use backend MTProto streamer (bypasses 20MB limit)
-    return `${baseUrl}/api/stream/${video.id}`;
+    let url = `${baseUrl}/api/stream/${video.id}`;
+    if (video.channel_id && video.message_id) {
+       url += `?c=${video.channel_id}&m=${video.message_id}`;
+    }
+    return url;
   } else if (video.source_type === 'drive') {
     // Use Cloudflare Worker for Drive
     return `${workerUrl}/drive/${video.drive_file_id}`;

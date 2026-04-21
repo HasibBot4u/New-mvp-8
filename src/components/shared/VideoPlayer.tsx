@@ -169,13 +169,16 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       let userMessage = 'ভিডিও লোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।';
       let code = 0;
       
-      if (errorMsg.includes('no supported source') || errorMsg.includes('MEDIA_ELEMENT_ERROR') || errorMsg.includes('MEDIA_ERR_SRC_NOT_SUPPORTED')) {
+      if (errorMsg.includes('no supported source') || errorMsg.includes('was not suitable') || errorMsg.includes('NotSupportedError') || errorMsg.includes('MEDIA_ELEMENT_ERROR') || errorMsg.includes('MEDIA_ERR_SRC_NOT_SUPPORTED')) {
         code = 3;
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
         code = 2;
       }
       
       userMessage = getErrorMessage(code);
+      if (code === 0 && errorMsg) {
+         userMessage += ` (Error: ${errorMsg})`;
+      }
       
       setHasError(true);
       setErrorMessage(userMessage);

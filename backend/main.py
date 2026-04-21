@@ -764,28 +764,36 @@ async def stream_telegram_chunks(client, message, start_byte: int, end_byte: int
         raise HTTPException(status_code=500, detail=f"Stream failed: {str(e)}")
 
 @app.api_route("/api/stream/{video_id}", methods=["GET", "HEAD"])
-async def stream_video(video_id: str, request: Request):
+async def stream_video(video_id: str, request: Request, c: str = None, m: str = None, source: str = None):
     """
     Stream video from Telegram using MTProto (bypasses 20MB limit)
     """
     try:
-        # 1. Fetch video metadata from existing logic
-        if video_id not in video_map:
-            await refresh_catalog()
-        if video_id not in video_map:
-            raise HTTPException(status_code=404, detail="Video not found")
+        # 1. Fetch video metadata from query params or map
+        if c and m:
+            channel_id_str = c
+            message_id_str = m
+            source_type = source or "telegram"
+        else:
+            if video_id not in video_map:
+                await refresh_catalog()
+            if video_id not in video_map:
+                raise HTTPException(status_code=404, detail="Video not found in active catalog. Provide c and m parameters.")
+            
+            video = video_map[video_id]
+            source_type = video.get("source_type", "telegram")
+            channel_id_str = video.get("channel_id", "")
+            message_id_str = video.get("message_id", 0)
+            
+            if source_type == "drive":
+                drive_file_id = video.get("drive_file_id")
+                if not drive_file_id:
+                    raise HTTPException(status_code=400, detail="Drive file ID missing")
+                worker_url = os.environ.get("VITE_CLOUDFLARE_WORKER_URL", "https://nexusedu-proxy.mdhosainp414.workers.dev")
+                return RedirectResponse(url=f"{worker_url}/drive/{drive_file_id}", status_code=302)
 
-        video = video_map[video_id]
-        
-        source_type = video.get("source_type", "telegram")
         if source_type == "youtube":
             raise HTTPException(status_code=400, detail="YouTube videos stream directly on client")
-        elif source_type == "drive":
-            drive_file_id = video.get("drive_file_id")
-            if not drive_file_id:
-                raise HTTPException(status_code=400, detail="Drive file ID missing")
-            worker_url = os.environ.get("VITE_CLOUDFLARE_WORKER_URL", "https://nexusedu-proxy.mdhosainp414.workers.dev")
-            return RedirectResponse(url=f"{worker_url}/drive/{drive_file_id}", status_code=302)
 
         # 2. Get active Telegram client
         connected = await ensure_telegram_connected()
