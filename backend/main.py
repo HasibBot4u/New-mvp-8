@@ -712,103 +712,162 @@ async def prefetch_video(video_id: str):
         return {"status": "error", "cached": False, "error": str(e)}
 
 
+# Pyrogram streams media in exact 1MB chunks internally.
+# Using any other math will cause byte misalignment and browser decoding errors (like MKV/AVI format errors).
+PYROGRAM_CHUNK_SIZE = 1048576
+
+async def stream_telegram_chunks(client, message, start_byte: int, end_byte: int):
+    """
+    RAM-efficient chunked streamer using Pyrogram MTProto.
+    Downloads and yields chunks without loading entire file into memory.
+    """
+    try:
+        # Get file attributes
+        media = message.video or message.document
+        if not media:
+            raise HTTPException(404, "No media found in message")
+        
+        file_size = media.file_size
+        total_bytes = end_byte - start_byte + 1
+        
+        # Pyrogram uses 1MB chunks. We must calculate the offset using exactly 1MB.
+        chunk_offset = start_byte // PYROGRAM_CHUNK_SIZE
+        current_offset = chunk_offset * PYROGRAM_CHUNK_SIZE
+        bytes_sent = 0
+        
+        # Use Pyrogram's internal chunked download with offset
+        async for chunk in client.stream_media(message, limit=None, offset=chunk_offset):
+            chunk_len = len(chunk)
+            
+            # Calculate overlap with requested range
+            chunk_start = current_offset
+            chunk_end = current_offset + chunk_len - 1
+            
+            # If chunk overlaps with requested range
+            if chunk_end >= start_byte and chunk_start <= end_byte:
+                overlap_start = max(0, start_byte - chunk_start)
+                overlap_end = min(chunk_len, end_byte - chunk_start + 1)
+                
+                yield chunk[overlap_start:overlap_end]
+                bytes_sent += (overlap_end - overlap_start)
+                
+                if bytes_sent >= total_bytes:
+                    break
+            
+            current_offset += chunk_len
+            
+            # Small delay to prevent Telegram flood wait
+            await asyncio.sleep(0.005)
+            
+    except Exception as e:
+        print(f"[NexusEdu] Stream error: {e}")
+        raise HTTPException(status_code=500, detail=f"Stream failed: {str(e)}")
+
 @app.api_route("/api/stream/{video_id}", methods=["GET", "HEAD"])
 async def stream_video(video_id: str, request: Request):
-    if video_id not in video_map:
-        await refresh_catalog()
-    if video_id not in video_map:
-        raise HTTPException(404, "Video not found")
-
-    info       = video_map[video_id]
-    
-    # Handle non-telegram sources explicitly
-    source_type = info.get("source_type", "telegram")
-    if source_type == "youtube":
-        raise HTTPException(400, "YouTube videos stream directly on client")
-    elif source_type == "drive":
-        drive_file_id = info.get("drive_file_id")
-        if not drive_file_id:
-            raise HTTPException(400, "Drive file ID missing")
-        worker_url = os.environ.get("VITE_CLOUDFLARE_WORKER_URL", "https://nexusedu-proxy.mdhosainp414.workers.dev")
-        return RedirectResponse(url=f"{worker_url}/{video_id}", status_code=302)
-
-    # TELEGRAM LOGIC
-    connected = await ensure_telegram_connected()
-    if not connected:
-        raise HTTPException(503, 
-            "Telegram client is not connected. "
-            "The server is reconnecting. Please retry in 30 seconds.")
-
-    channel_id_str = info.get("channel_id", "")
-    message_id_str = info.get("message_id", 0)
-
-    if not channel_id_str or not message_id_str:
-        raise HTTPException(400, "Video not linked to Telegram — set message_id in admin panel")
-
-    channel_id = int(channel_id_str)
-    message_id = int(message_id_str)
-
-    await resolve_channel(channel_id)
-
+    """
+    Stream video from Telegram using MTProto (bypasses 20MB limit)
+    """
     try:
-        total, mime_type = await get_file_info(channel_id, message_id, video_id=video_id)
-        if not total:
-            raise HTTPException(500, "Could not read file size from Telegram")
+        # 1. Fetch video metadata from existing logic
+        if video_id not in video_map:
+            await refresh_catalog()
+        if video_id not in video_map:
+            raise HTTPException(status_code=404, detail="Video not found")
 
-        print(f"Streaming video {video_id}, media_type: {mime_type}, method: {request.method}")
+        video = video_map[video_id]
         
+        source_type = video.get("source_type", "telegram")
+        if source_type == "youtube":
+            raise HTTPException(status_code=400, detail="YouTube videos stream directly on client")
+        elif source_type == "drive":
+            drive_file_id = video.get("drive_file_id")
+            if not drive_file_id:
+                raise HTTPException(status_code=400, detail="Drive file ID missing")
+            worker_url = os.environ.get("VITE_CLOUDFLARE_WORKER_URL", "https://nexusedu-proxy.mdhosainp414.workers.dev")
+            return RedirectResponse(url=f"{worker_url}/drive/{drive_file_id}", status_code=302)
+
+        # 2. Get active Telegram client
+        connected = await ensure_telegram_connected()
+        if not connected:
+            raise HTTPException(status_code=503, detail="Telegram client is not connected.")
+
+        channel_id_str = video.get("channel_id", "")
+        message_id_str = video.get("message_id", 0)
+
+        if not channel_id_str or not message_id_str:
+            raise HTTPException(status_code=400, detail="Video not linked to Telegram")
+
+        channel_id = int(channel_id_str)
+        message_id = int(message_id_str)
+        
+        await resolve_channel(channel_id)
+        
+        tg_client = get_active_client()
+        if not tg_client:
+            raise HTTPException(status_code=503, detail="No active Pyrogram client found")
+
+        message = await get_message(channel_id, message_id)
+        if not message:
+            raise HTTPException(status_code=404, detail="Telegram message not found")
+
+        media = message.video or message.document
+        if not media:
+            raise HTTPException(status_code=404, detail="Message has no media")
+
+        file_size = media.file_size
+        mime_type = "video/mp4"
+
         if request.method == "HEAD":
             return Response(
                 status_code=200,
                 media_type=mime_type,
                 headers={
-                    "Content-Length": str(total),
+                    "Content-Length": str(file_size),
                     "Accept-Ranges": "bytes",
                     "Content-Type": mime_type,
                     "Cache-Control": "no-cache",
                 }
             )
-
-        range_header = request.headers.get("range")
-
+        
+        # 3. Parse Range header
+        range_header = request.headers.get("Range")
+        start_byte = 0
+        end_byte = file_size - 1
+        
         if range_header:
-            # ── Seeking / subsequent request ──────────────────────
-            start, end = _parse_range(range_header, total)
-            length = end - start + 1
-            return StreamingResponse(
-                _stream_telegram(channel_id, message_id, start, end, total),
-                status_code=206,
-                media_type=mime_type,
-                headers={
-                    "Content-Range":  f"bytes {start}-{end}/{total}",
-                    "Content-Length": str(length),
-                    "Accept-Ranges": "bytes",
-                    "Content-Type": mime_type,
-                    "Cache-Control": "no-cache",
-                },
-            )
+            range_str = range_header.replace("bytes=", "").strip()
+            if "-" in range_str:
+                start_str, end_str = range_str.split("-")
+                start_byte = int(start_str) if start_str else 0
+                end_byte = int(end_str) if end_str else file_size - 1
         else:
-            # ── First request — return ONLY the first 512KB as HTTP 206 ──
-            initial_end = min(total - 1, INITIAL_BUFFER - 1)
-            length      = initial_end + 1
-            return StreamingResponse(
-                _stream_telegram(channel_id, message_id, 0, initial_end, total),
-                status_code=206,
-                media_type=mime_type,
-                headers={
-                    "Content-Range":  f"bytes 0-{initial_end}/{total}",
-                    "Content-Length": str(length),
-                    "Accept-Ranges": "bytes",
-                    "Content-Type": mime_type,
-                    "Cache-Control": "no-cache",
-                },
-            )
+            # Without range, maybe limit it so it doesn't try to buffer 1GB immediately in Chrome on some profiles
+            end_byte = file_size - 1
 
+        start_byte = max(0, min(start_byte, file_size - 1))
+        end_byte = max(start_byte, min(end_byte, file_size - 1))
+
+        # 4. Stream chunks
+        return StreamingResponse(
+            stream_telegram_chunks(tg_client, message, start_byte, end_byte),
+            status_code=206 if range_header else 200,
+            media_type=mime_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start_byte}-{end_byte}/{file_size}",
+                "Content-Length": str(end_byte - start_byte + 1),
+                "Content-Type": mime_type,
+                "Cache-Control": "public, max-age=31536000",
+                "X-Content-Type-Options": "nosniff",
+            }
+        )
+        
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[NexusEdu] Stream error for {video_id}: {e}")
-        raise HTTPException(500, f"Stream error: {e}")
+        print(f"[NexusEdu] Stream endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.get("/api/test-stream")

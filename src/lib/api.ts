@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 async function fetchWithTimeout(url: string, ms: number, options?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
@@ -61,37 +59,21 @@ export async function refreshCatalog(): Promise<void> {
   try { await fetchWithTimeout(`${backend}/api/refresh`, 15000); } catch { /* ignore */ }
 }
 
-export async function getStreamUrl(videoId: string): Promise<string | null> {
-  try {
-    // Fetch video metadata first via Supabase since there's no backend endpoint for a single video
-    const { data: video, error } = await supabase
-      .from('videos')
-      .select('*')
-      .eq('id', videoId)
-      .single();
-
-    if (error || !video) {
-      console.error('Error getting video metadata from Supabase:', error);
-      return null;
-    }
-
-    // Determine correct streaming URL based on source
-    if (!video.source_type || video.source_type === 'telegram') {
-      // Format: https://worker-url/telegram/{channel_id}/{message_id}
-      // Note: channel_id MUST include the minus sign (e.g., -1003569793885)
-      return `https://nexusedu-proxy.mdhosainp414.workers.dev/telegram/${video.telegram_channel_id}/${video.telegram_message_id}`;
-    } else if (video.source_type === 'drive') {
-      return `https://nexusedu-proxy.mdhosainp414.workers.dev/drive/${video.drive_file_id}`;
-    } else if (video.source_type === 'youtube') {
-      return `https://www.youtube.com/embed/${video.youtube_video_id}?autoplay=1&controls=0&modestbranding=1&rel=0&disablekb=1`;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error getting stream URL:', error);
-    return null;
+export const getStreamUrl = (video: any): string => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
+  const workerUrl = 'https://nexusedu-proxy.mdhosainp414.workers.dev';
+  
+  if (video.source_type === 'telegram') {
+    // Use backend MTProto streamer (bypasses 20MB limit)
+    return `${baseUrl}/api/stream/${video.id}`;
+  } else if (video.source_type === 'drive') {
+    // Use Cloudflare Worker for Drive
+    return `${workerUrl}/drive/${video.drive_file_id}`;
+  } else if (video.source_type === 'youtube') {
+    return `https://www.youtube.com/embed/${video.youtube_video_id}?autoplay=1&controls=0&modestbranding=1&rel=0&disablekb=1`;
   }
-}
+  return '';
+};
 
 export async function prefetchVideo(videoId: string): Promise<void> {
   const backend = await getWorkingBackend();

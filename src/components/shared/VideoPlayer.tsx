@@ -3,6 +3,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, PictureInPicture, Se
 import { useToast } from '../ui/Toast';
 import { useVideoProgress } from '../../hooks/useVideoProgress';
 import { WakeUpCountdown } from '../WakeUpCountdown';
+import { supabase } from '../../lib/supabase';
 import { getStreamUrl, clearBackendCache, api } from '../../lib/api';
 
 interface VideoPlayerProps {
@@ -126,7 +127,17 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
 
       if (!mountedRef.current) return;
 
-      const streamUrl = await getStreamUrl(videoId);
+      const { data: videoData, error: videoError } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', videoId)
+        .single();
+
+      if (videoError || !videoData) {
+        throw new Error("ভিডিও ডেটা পাওয়া যায়নি");
+      }
+
+      const streamUrl = getStreamUrl(videoData);
       if (!streamUrl) {
         throw new Error("ভিডিও স্ট্রিম লিঙ্ক পাওয়া যায়নি");
       }
