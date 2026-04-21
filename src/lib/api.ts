@@ -63,19 +63,23 @@ export const getStreamUrl = (video: any): string => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
   const workerUrl = 'https://nexusedu-proxy.mdhosainp414.workers.dev';
   
-  if (video.source_type === 'telegram') {
+  // Default to telegram if source_type is missing or empty
+  const sourceType = video.source_type || 'telegram';
+  
+  if (sourceType === 'telegram') {
     // Use backend MTProto streamer (bypasses 20MB limit)
     let url = `${baseUrl}/api/stream/${video.id}`;
     if (video.channel_id && video.message_id) {
        url += `?c=${video.channel_id}&m=${video.message_id}`;
     }
     return url;
-  } else if (video.source_type === 'drive') {
+  } else if (sourceType === 'drive') {
     // Use Cloudflare Worker for Drive
     return `${workerUrl}/drive/${video.drive_file_id}`;
-  } else if (video.source_type === 'youtube') {
+  } else if (sourceType === 'youtube') {
     return `https://www.youtube.com/embed/${video.youtube_video_id}?autoplay=1&controls=0&modestbranding=1&rel=0&disablekb=1`;
   }
+  
   return '';
 };
 
