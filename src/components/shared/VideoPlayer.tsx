@@ -500,12 +500,18 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
   const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const vid = e.currentTarget;
     const code = vid.error?.code ?? 0;
+    const errMsg = vid.error?.message || '';
     
     if (code === 4) {
       clearBackendCache();
     }
     
-    setErrorMessage(getErrorMessage(code));
+    let msg = getErrorMessage(code);
+    if ((code === 0 || code === 4) && errMsg) {
+       msg += ` [MediaError: ${errMsg}]`;
+    }
+    
+    setErrorMessage(msg);
     setHasError(true);
     setIsStarting(false);
     setHasStarted(false);
