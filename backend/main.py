@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, Response
+from fastapi.responses import StreamingResponse, JSONResponse, Response, RedirectResponse
 from pyrogram import Client
 
 # ─── CONFIG ───────────────────────────────────────────────────
@@ -152,12 +152,25 @@ async def get_file_info(channel_id: int, message_id: int, video_id: str = None) 
     # Fetch from Telegram
     msg = await get_message(channel_id, message_id)
     size = 0
-    mime = "video/mp4"  # Always use mp4 for browser compatibility
-    if msg.video:
-        size = msg.video.file_size or 0
-    elif msg.document:
-        size = msg.document.file_size or 0
-        # Force mp4 even for mkv/avi — browser will show clear error if wrong format
+    mime = "video/mp4"
+    
+    media = msg.video or msg.document
+    if media:
+        size = media.file_size or 0
+        if hasattr(media, 'mime_type') and media.mime_type:
+            mime = media.mime_type
+        else:
+            file_name = getattr(media, 'file_name', '') or ''
+            file_name_lower = file_name.lower()
+            if file_name_lower.endswith('.mkv'):
+                mime = 'video/x-matroska'
+            elif file_name_lower.endswith('.avi'):
+                mime = 'video/x-msvideo'
+            elif file_name_lower.endswith('.webm'):
+                mime = 'video/webm'
+            elif file_name_lower.endswith('.mov'):
+                mime = 'video/quicktime'
+            
     # Cache to Supabase (fire and forget — don't block streaming)
     if video_id and size > 0 and SUPABASE_URL and SUPABASE_KEY:
         asyncio.create_task(_save_file_metadata(video_id, size, mime))
@@ -487,7 +500,11 @@ app = FastAPI(title="NexusEdu Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://nexus-educations.netlify.app",
+        "https://educations.netlify.app"
+    ],
     allow_credentials=False,
     allow_methods=["GET", "HEAD", "OPTIONS"],
     allow_headers=["*"],
@@ -752,8 +769,13 @@ async def stream_telegram_chunks(client, message, start_byte: int, end_byte: int
         current_offset = chunk_offset * PYROGRAM_CHUNK_SIZE
         bytes_sent = 0
         
+        # Calculate exactly how many chunks we need to avoid massive over-streaming
+        import math
+        needed_bytes = end_byte - current_offset + 1
+        limit = math.ceil(needed_bytes / PYROGRAM_CHUNK_SIZE)
+        
         # Use Pyrogram's internal chunked download with offset
-        async for chunk in client.stream_media(message, limit=None, offset=chunk_offset):
+        async for chunk in client.stream_media(message, limit=limit, offset=chunk_offset):
             chunk_len = len(chunk)
             
             # Calculate overlap with requested range
@@ -772,9 +794,6 @@ async def stream_telegram_chunks(client, message, start_byte: int, end_byte: int
                     break
             
             current_offset += chunk_len
-            
-            # Small delay to prevent Telegram flood wait
-            await asyncio.sleep(0.005)
             
     except Exception as e:
         print(f"[NexusEdu] Stream error: {e}")
@@ -838,7 +857,24 @@ async def stream_video(video_id: str, request: Request, c: str = None, m: str = 
             raise HTTPException(status_code=404, detail="Message has no media")
 
         file_size = media.file_size
-        mime_type = "video/mp4"
+        
+        # Detect actual MIME type from file content or extension
+        if media and hasattr(media, 'mime_type') and media.mime_type:
+            mime_type = media.mime_type
+        else:
+            # Fallback based on file name extension
+            file_name = getattr(media, 'file_name', '') or ''
+            file_name_lower = file_name.lower()
+            if file_name_lower.endswith('.mkv'):
+                mime_type = 'video/x-matroska'
+            elif file_name_lower.endswith('.avi'):
+                mime_type = 'video/x-msvideo'
+            elif file_name_lower.endswith('.webm'):
+                mime_type = 'video/webm'
+            elif file_name_lower.endswith('.mov'):
+                mime_type = 'video/quicktime'
+            else:
+                mime_type = 'video/mp4'  # Safe fallback
 
         if request.method == "HEAD":
             return Response(
@@ -869,6 +905,11 @@ async def stream_video(video_id: str, request: Request, c: str = None, m: str = 
 
         start_byte = max(0, min(start_byte, file_size - 1))
         end_byte = max(start_byte, min(end_byte, file_size - 1))
+
+        # Cap range size per request to 50MB to prevent memory exhaustion
+        MAX_RANGE_SIZE = 50 * 1024 * 1024
+        if end_byte - start_byte + 1 > MAX_RANGE_SIZE:
+            end_byte = start_byte + MAX_RANGE_SIZE - 1
 
         # 4. Stream chunks
         return StreamingResponse(

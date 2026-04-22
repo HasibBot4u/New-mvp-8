@@ -117,9 +117,8 @@ export const YouTubeStealthPlayer = forwardRef<YouTubeStealthPlayerRef, Props>(
       getDuration: () => playerRef.current?.getDuration() || 0,
     }));
 
-    // Add pointer-events-none to prevent clicking YouTube logo and opening new tab
     return (
-      <div className={`relative w-full h-full pointer-events-none ${className || ''}`}>
+      <div className={`relative w-full h-full ${className || ''}`}>
         <div ref={containerRef} className="absolute inset-0 w-full h-full" />
       </div>
     );

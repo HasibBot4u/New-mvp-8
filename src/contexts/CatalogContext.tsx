@@ -82,7 +82,7 @@ async function fetchCatalogFromSupabase(): Promise<CatalogData> {
         // Step 4: Fetch videos
         const { data: vids, error: vidErr } = await supabase
           .from('videos')
-          .select('id, chapter_id, title, title_bn, telegram_channel_id, telegram_message_id, duration, size_mb, display_order')
+          .select('id, chapter_id, title, title_bn, source_type, telegram_channel_id, telegram_message_id, youtube_video_id, drive_file_id, duration, size_mb, display_order')
           .in('chapter_id', chapterIds)
           .eq('is_active', true)
           .order('display_order');
