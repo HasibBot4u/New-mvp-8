@@ -4,9 +4,26 @@ CREATE OR REPLACE FUNCTION check_chapter_access(
   p_chapter_id uuid,
   p_device_fingerprint text DEFAULT ''
 ) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_role text;
+  v_enrolled boolean;
 BEGIN
-  -- Extend this logic for stricter checks later.
-  RETURN true;
+  -- 1. Check if user is admin
+  SELECT role INTO v_user_role FROM profiles WHERE id = auth.uid();
+  IF v_user_role = 'admin' THEN
+    RETURN true;
+  END IF;
+
+  -- 2. Check if user is enrolled (global enrollment or specific permissions)
+  -- If your system uses a profile-level global 'is_enrolled' boolean, check it here:
+  SELECT is_enrolled INTO v_enrolled FROM profiles WHERE id = auth.uid();
+  IF v_enrolled THEN
+    RETURN true;
+  END IF;
+
+  -- 3. Check for specific chapter code usage (requires a table for code uses)
+  -- For now, if not admin and not globally enrolled, deny access.
+  RETURN false;
 END; $$;
 
 CREATE OR REPLACE FUNCTION use_chapter_enrollment_code(
@@ -16,10 +33,24 @@ CREATE OR REPLACE FUNCTION use_chapter_enrollment_code(
   p_device_user_agent text DEFAULT '',
   p_device_info jsonb DEFAULT '{}'
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_result boolean;
+DECLARE 
+  v_code_record RECORD;
 BEGIN
-  -- Make sure `use_enrollment_code` exists (it's in database_updates_5.sql)
-  -- Defaulting to true for now since previous implementation failed completely
+  -- Simple implementation checking enrollment_codes table
+  SELECT * INTO v_code_record FROM enrollment_codes 
+  WHERE code = p_code AND active = true AND (max_uses = 0 OR uses_count < max_uses);
+
+  IF NOT FOUND THEN
+    RETURN '{"success": false, "message_bn": "কোডটি অবৈধ বা মেয়াদোত্তীর্ণ"}'::jsonb;
+  END IF;
+
+  -- Here you would normally log the code usage to a code_usages table
+  -- and grant specific chapter access. Since we use generic profile is_enrolled 
+  -- for global access in this logic MVP:
+  UPDATE profiles SET is_enrolled = true WHERE id = auth.uid();
+
+  UPDATE enrollment_codes SET uses_count = uses_count + 1 WHERE id = v_code_record.id;
+
   RETURN '{"success": true, "message_bn": "এনরোলমেন্ট সফল হয়েছে"}'::jsonb;
 END; $$;
 
@@ -53,3 +84,12 @@ ALTER TABLE watch_history
   ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS watched_at TIMESTAMPTZ DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- 4. Add indices for foreign keys and queries
+CREATE INDEX IF NOT EXISTS idx_watch_history_user_video ON watch_history(user_id, video_id);
+CREATE INDEX IF NOT EXISTS idx_videos_chapter_id ON videos(chapter_id);
+CREATE INDEX IF NOT EXISTS idx_chapters_cycle_id ON chapters(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_cycles_subject_id ON cycles(subject_id);
+-- Assuming quizzes and notifications exist
+-- CREATE INDEX IF NOT EXISTS idx_quizzes_chapter_id ON quizzes(chapter_id);
+-- CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);

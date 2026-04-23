@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { CatalogData, CatalogSubject, CatalogCycle, CatalogChapter, CatalogVideo } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -12,7 +12,8 @@ interface CatalogContextType {
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
-const CACHE_KEY = `nexusedu_catalog_v${import.meta.env.VITE_BUILD_TIME || Date.now()}`;
+// Fallback to static 'v1' instead of Date.now() so caching works without env variable
+const CACHE_KEY = `nexusedu_catalog_v${import.meta.env.VITE_BUILD_TIME || '1'}`;
 const CACHE_TTL = 10 * 60 * 1000;
 
 export const clearCatalogCache = () => {
@@ -39,14 +40,15 @@ const saveCache = (data: CatalogData) => {
  * Fetch catalog directly from Supabase.
  * This is the primary source — does NOT depend on Render backend being awake.
  */
-async function fetchCatalogFromSupabase(): Promise<CatalogData> {
+async function fetchCatalogFromSupabase(signal?: AbortSignal): Promise<CatalogData> {
   const fetchTask = async () => {
     // Step 1: Fetch subjects
     const { data: subjects, error: subErr } = await supabase
       .from('subjects')
       .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
       .eq('is_active', true)
-      .order('display_order');
+      .order('display_order')
+      .abortSignal(signal as AbortSignal);
     if (subErr) throw new Error(subErr.message);
     if (!subjects || subjects.length === 0) {
       return { subjects: [], total_videos: 0 };
@@ -59,7 +61,8 @@ async function fetchCatalogFromSupabase(): Promise<CatalogData> {
       .select('id, subject_id, name, name_bn, telegram_channel_id, display_order')
       .in('subject_id', subjectIds)
       .eq('is_active', true)
-      .order('display_order');
+      .order('display_order')
+      .abortSignal(signal as AbortSignal);
     if (cycErr) throw new Error(cycErr.message);
 
     const cycleIds = (cycles || []).map((c: any) => c.id);
@@ -73,7 +76,8 @@ async function fetchCatalogFromSupabase(): Promise<CatalogData> {
         .select('id, cycle_id, name, name_bn, requires_enrollment, display_order')
         .in('cycle_id', cycleIds)
         .eq('is_active', true)
-        .order('display_order');
+        .order('display_order')
+        .abortSignal(signal as AbortSignal);
       if (chErr) throw new Error(chErr.message);
       chapters = ch || [];
 
@@ -85,7 +89,8 @@ async function fetchCatalogFromSupabase(): Promise<CatalogData> {
           .select('id, chapter_id, title, title_bn, source_type, telegram_channel_id, telegram_message_id, youtube_video_id, drive_file_id, duration, size_mb, display_order')
           .in('chapter_id', chapterIds)
           .eq('is_active', true)
-          .order('display_order');
+          .order('display_order')
+          .abortSignal(signal as AbortSignal);
         if (vidErr) throw new Error(vidErr.message);
         videos = vids || [];
       }
@@ -127,7 +132,7 @@ async function fetchCatalogFromSupabase(): Promise<CatalogData> {
   };
 
   const timeoutPromise = new Promise<CatalogData>((_, reject) => 
-    setTimeout(() => reject(new Error('Catalog fetch timeout')), 8000)
+    setTimeout(() => reject(new Error('Catalog fetch timeout')), 12000)
   );
 
   return Promise.race([fetchTask(), timeoutPromise]);
@@ -138,14 +143,22 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isLoading, setIsLoading] = useState(!loadCache()); // skip loading if cache hit
   const [error, setError] = useState<string | null>(null);
 
+  const ctrlRef = useRef<AbortController | null>(null);
+
   const fetchCatalog = useCallback(async (force = false) => {
+    if (ctrlRef.current) {
+      ctrlRef.current.abort();
+    }
+    ctrlRef.current = new AbortController();
+    const signal = ctrlRef.current.signal;
+
     if (!force) {
       const cached = loadCache();
       if (cached) {
         setCatalog(cached);
         setIsLoading(false);
         // Refresh in background silently
-        fetchCatalogFromSupabase()
+        fetchCatalogFromSupabase(signal)
           .then(fresh => { setCatalog(fresh); saveCache(fresh); setError(null); })
           .catch(() => { /* silent background refresh failure is ok */ });
         return;
@@ -156,7 +169,7 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setError(null);
 
     try {
-      const data = await fetchCatalogFromSupabase();
+      const data = await fetchCatalogFromSupabase(signal);
       setCatalog(data);
       saveCache(data);
       setError(null);

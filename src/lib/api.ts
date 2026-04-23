@@ -9,7 +9,9 @@ async function fetchWithTimeout(url: string, ms: number, options?: RequestInit):
 }
 
 export async function getWorkingBackend(): Promise<string> {
-  const envUrl = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (!envUrl) throw new Error('VITE_API_BASE_URL is required');
+
   const PRIMARY = envUrl.replace(/\/$/, '');
   const REPLIT  = import.meta.env.VITE_REPLIT_URL || '';
   const CACHE_KEY = 'nexusedu_working_backend';
@@ -26,7 +28,7 @@ export async function getWorkingBackend(): Promise<string> {
   
   // Try primary
   try {
-    const r = await fetchWithTimeout(`${PRIMARY}/api/health`, 45000);
+    const r = await fetchWithTimeout(`${PRIMARY}/api/health`, 8000); // reduced timeout for health check
     if (r.ok) {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ url: PRIMARY, ts: Date.now() }));
       return PRIMARY;
@@ -36,7 +38,7 @@ export async function getWorkingBackend(): Promise<string> {
   // Try replit fallback
   if (REPLIT) {
     try {
-      const r = await fetchWithTimeout(`${REPLIT}/api/health`, 12000);
+      const r = await fetchWithTimeout(`${REPLIT}/api/health`, 8000);
       if (r.ok) {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ url: REPLIT, ts: Date.now() }));
         return REPLIT;
@@ -44,7 +46,7 @@ export async function getWorkingBackend(): Promise<string> {
     } catch { /* ignore */ }
   }
   
-  return PRIMARY;  // Return primary even if down
+  throw new Error("No backend service is currently available");
 }
 
 export function clearBackendCache(): void {
@@ -55,13 +57,16 @@ let _lastRefresh = 0;
 export async function refreshCatalog(): Promise<void> {
   if (Date.now() - _lastRefresh < 60000) return;
   _lastRefresh = Date.now();
-  const backend = await getWorkingBackend();
+  const backend = await getWorkingBackend().catch(() => null);
+  if (!backend) return;
   try { await fetchWithTimeout(`${backend}/api/refresh`, 15000); } catch { /* ignore */ }
 }
 
 export const getStreamUrl = (video: any): string => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://nexusedu-backend-0bjq.onrender.com';
-  const workerUrl = 'https://nexusedu-proxy.mdhosainp414.workers.dev';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL;
+  if (!baseUrl) return '';
+
+  const workerUrl = import.meta.env.VITE_WORKER_URL || 'https://nexusedu-proxy.mdhosainp414.workers.dev';
   
   // Default to telegram if source_type is missing or empty
   const sourceType = video.source_type || 'telegram';
@@ -89,13 +94,15 @@ export const getStreamUrl = (video: any): string => {
 };
 
 export async function prefetchVideo(videoId: string): Promise<void> {
-  const backend = await getWorkingBackend();
+  const backend = await getWorkingBackend().catch(() => null);
+  if (!backend) return;
   try { await fetchWithTimeout(`${backend}/api/prefetch/${videoId}`, 10000); } catch { /* ignore */ }
 }
 
 export async function fetchBackendHealth(): Promise<Record<string, unknown>> {
-  const backend = await getWorkingBackend();
-  const r = await fetchWithTimeout(`${backend}/api/health`, 30000); // Wait longer for backend
+  const backend = await getWorkingBackend().catch(() => null);
+  if (!backend) return { status: 'offline', telegram: 'disconnected' };
+  const r = await fetchWithTimeout(`${backend}/api/health`, 15000); // Wait longer for backend
   return r.json();
 }
 

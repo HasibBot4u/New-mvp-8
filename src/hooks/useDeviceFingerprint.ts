@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+// WARNING: This fingerprint relies on easily spoofable browser properties.
+// It is strictly for analytics and rate-limiting hints, NOT for cryptographic security or hard access control.
 let _cachedFingerprint: string | null = null;
 
 export async function getDeviceFingerprint(): Promise<string> {

@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CatalogProvider } from './contexts/CatalogContext';
 import { ToastProvider } from './components/ui/Toast';
@@ -74,21 +74,27 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
 
 function AppLayout() {
   const { user } = useAuth();
+  const location = useLocation();
+  const isPlayerPage = location.pathname.includes('/player/');
+  
   return (
-    <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
+    <div className={`min-h-screen bg-gray-50 ${isPlayerPage ? '' : 'pb-16 md:pb-0'}`}>
       <Outlet />
-      {user && <BottomNav />}
+      {user && !isPlayerPage && <BottomNav />}
     </div>
   );
 }
 
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 function App() {
   return (
-    <SystemSettingsProvider>
-      <AuthProvider>
-        <CatalogProvider>
-          <ToastProvider>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <ErrorBoundary>
+      <SystemSettingsProvider>
+        <AuthProvider>
+          <CatalogProvider>
+            <ToastProvider>
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Suspense fallback={
                 <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
                   <LoadingSpinner />
@@ -142,6 +148,7 @@ function App() {
         </CatalogProvider>
       </AuthProvider>
     </SystemSettingsProvider>
+    </ErrorBoundary>
   );
 }
 

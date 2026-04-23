@@ -210,22 +210,6 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       }
     });
 
-    // Basic keyboard shortcut blocking (DevTools)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-        (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
-      ) {
-        e.preventDefault();
-        return false;
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
   }, [videoId, loadProgressFromSupabase]);
 
   const formatTime = (time: number) => {
@@ -348,6 +332,15 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
     setShowSpeedMenu(false);
     showToast(`Speed changed to ${speed}x`);
   };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup PiP on unmount
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {});
+      }
+    };
+  }, []);
 
   const togglePiP = async () => {
     if (!hasStarted || !videoRef.current) return;

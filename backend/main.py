@@ -92,6 +92,7 @@ catalog_cache   = {"data": None, "timestamp": 0}
 video_map       = {}          # uuid → {channel_id, message_id}
 message_cache: LRUDict = LRUDict(max_size=300, ttl_seconds=3600)
 resolved_channels = set()
+catalog_lock = asyncio.Lock()
 
 # ─── TELEGRAM HELPERS ─────────────────────────────────────────
 async def resolve_channel(channel_id: int | str) -> bool:
@@ -99,7 +100,10 @@ async def resolve_channel(channel_id: int | str) -> bool:
     if cid in resolved_channels:
         return True
     try:
-        await tg.get_chat(cid)
+        client = get_active_client()
+        if client is None:
+            return False
+        await client.get_chat(cid)
         resolved_channels.add(cid)
         print(f"[NexusEdu] Resolved channel {cid}")
         return True
@@ -110,7 +114,9 @@ async def resolve_channel(channel_id: int | str) -> bool:
 
 async def preload_channels():
     try:
-        async for dialog in tg.get_dialogs():
+        client = get_active_client()
+        if client is None: return
+        async for dialog in client.get_dialogs():
             try:
                 resolved_channels.add(dialog.chat.id)
             except Exception:
@@ -227,7 +233,9 @@ async def _prewarm_single(cid_str: str, message_id: int, cache_key: str) -> bool
     try:
         cid = int(cid_str)
         await resolve_channel(cid)
-        msg = await tg.get_messages(cid, message_id)
+        client = get_active_client()
+        if client is None: return False
+        msg = await client.get_messages(cid, message_id)
         if msg and not msg.empty:
             message_cache[cache_key] = msg
             return True
@@ -344,10 +352,11 @@ async def refresh_catalog():
                 subj_data["cycles"].append(cyc_data)
             result.append(subj_data)
 
-        catalog_cache = {
-            "data":      {"subjects": result, "total_videos": len(videos)},
-            "timestamp": time.time(),
-        }
+        async with catalog_lock:
+            catalog_cache = {
+                "data":      {"subjects": result, "total_videos": len(videos)},
+                "timestamp": time.time(),
+            }
         print(f"[NexusEdu] Catalog loaded: {len(videos)} video(s).")
 
         # Pre-warm all messages in background — eliminates first-play delay
@@ -435,6 +444,7 @@ async def telegram_watchdog():
             await asyncio.sleep(60)
         except Exception as e:
             fail_count += 1
+            fail_count = min(fail_count, 10)
             wait = min(60 * (2 ** (fail_count - 1)), 900)
             print(f"[watchdog] fail #{fail_count}, retry in {wait}s: {e}")
             await asyncio.sleep(wait)
@@ -525,64 +535,7 @@ def get_active_client() -> Optional[Client]:
         try:
             if tg2.is_connected: return tg2
         except Exception: pass
-    return tg  # Return primary even if disconnected (will trigger reconnect)
-
-async def _stream_telegram(
-    channel_id: int, message_id: int,
-    start: int, end: int, total: int
-):
-    """
-    Async generator — pulls 1MB chunks from Telegram and yields bytes.
-    Byte-accurate: handles non-aligned range starts via skip_bytes.
-    """
-    chunk_offset = start // CHUNK_SIZE
-    skip_bytes   = start % CHUNK_SIZE
-    needed       = math.ceil((end - start + 1 + skip_bytes) / CHUNK_SIZE)
-
-    msg = await get_message(channel_id, message_id)
-
-    bytes_sent  = 0
-    target      = end - start + 1
-    first_chunk = True
-
-    client = get_active_client()
-    if client is None:
-        raise Exception("No Telegram client available")
-    
-    try:
-        async for chunk in client.stream_media(msg, offset=chunk_offset, limit=needed):
-            data = bytes(chunk)
-            if first_chunk and skip_bytes:
-                data        = data[skip_bytes:]
-                first_chunk = False
-            remaining = target - bytes_sent
-            if len(data) > remaining:
-                data = data[:remaining]
-            if not data:
-                break
-            bytes_sent += len(data)
-            yield data
-            if bytes_sent >= target:
-                break
-    except Exception as e:
-        if "flood" in str(e).lower() or "FloodWait" in type(e).__name__:
-            print(f"[NexusEdu] Telegram FloodWait on stream: {e}", flush=True)
-        else:
-            print(f"[NexusEdu] Stream error: {e}", flush=True)
-
-
-def _parse_range(range_header: str, total: int) -> Tuple[int, int]:
-    """Parse 'bytes=X-Y' or 'bytes=X-' into (start, end)."""
-    try:
-        val   = range_header.replace("bytes=", "").strip()
-        parts = val.split("-")
-        start = int(parts[0]) if parts[0].strip() else 0
-        end   = int(parts[1]) if len(parts) > 1 and parts[1].strip() else total - 1
-        start = max(0, min(start, total - 1))
-        end   = max(start, min(end, total - 1))
-        return start, end
-    except (ValueError, IndexError):
-        return 0, total - 1
+    return None  # Return None if no client is connected to properly fail and trigger reconnect upstream
 
 
 # ─── ENDPOINTS ────────────────────────────────────────────────
@@ -617,16 +570,30 @@ async def health():
         "status": overall,
         "telegram": tg_status,
         "telegram_secondary": tg2_status,
-        "videos_cached": len(video_map),
-        "messages_cached": len(message_cache),
-        "catalog_age_minutes": catalog_age,
-        "session_set": bool(SESSION_STRING),
-        "session2_set": bool(SESSION_STRING_2),
-    }, headers={"Access-Control-Allow-Origin": "*"})
+    })
 
+
+# Simple rate limiter for endpoints
+from collections import defaultdict
+import time
+rate_limits = defaultdict(list)
+
+def check_rate_limit(client_ip: str, limit: int = 5, window_seconds: int = 60) -> bool:
+    now = time.time()
+    # Clean up old timestamps
+    rate_limits[client_ip] = [t for t in rate_limits[client_ip] if now - t < window_seconds]
+    if len(rate_limits[client_ip]) >= limit:
+        return False
+    rate_limits[client_ip].append(now)
+    return True
 
 @app.get("/api/debug")
 async def debug(request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip, limit=5, window_seconds=60):
+        # Prevent brute-force on ADMIN_TOKEN
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+
     admin_token = os.environ.get("ADMIN_TOKEN", "")
     if not admin_token:
         raise HTTPException(status_code=403, detail="Debug endpoint disabled. Set ADMIN_TOKEN env var.")
@@ -746,64 +713,73 @@ async def prefetch_video(video_id: str):
         return {"status": "error", "cached": False, "error": str(e)}
 
 
-# Pyrogram streams media in exact 1MB chunks internally.
-# Using any other math will cause byte misalignment and browser decoding errors (like MKV/AVI format errors).
-PYROGRAM_CHUNK_SIZE = 1048576
+CHUNK_SIZE = 1048576
 
-async def stream_telegram_chunks(client, message, start_byte: int, end_byte: int):
+async def _stream_telegram(
+    channel_id: int, message_id: int,
+    start: int, end: int, total: int
+):
     """
-    RAM-efficient chunked streamer using Pyrogram MTProto.
-    Downloads and yields chunks without loading entire file into memory.
+    Async generator — pulls 1MB chunks from Telegram and yields bytes.
+    Byte-accurate: handles non-aligned range starts via skip_bytes.
     """
+    chunk_offset = start // CHUNK_SIZE
+    skip_bytes   = start % CHUNK_SIZE
+    needed       = math.ceil((end - start + 1 + skip_bytes) / CHUNK_SIZE)
+
+    msg = await get_message(channel_id, message_id)
+
+    bytes_sent  = 0
+    target      = end - start + 1
+    first_chunk = True
+
+    client = get_active_client()
+    if client is None:
+        raise Exception("No Telegram client available")
+    
     try:
-        # Get file attributes
-        media = message.video or message.document
-        if not media:
-            raise HTTPException(404, "No media found in message")
-        
-        file_size = media.file_size
-        total_bytes = end_byte - start_byte + 1
-        
-        # Pyrogram uses 1MB chunks. We must calculate the offset using exactly 1MB.
-        chunk_offset = start_byte // PYROGRAM_CHUNK_SIZE
-        current_offset = chunk_offset * PYROGRAM_CHUNK_SIZE
-        bytes_sent = 0
-        
-        # Calculate exactly how many chunks we need to avoid massive over-streaming
-        import math
-        needed_bytes = end_byte - current_offset + 1
-        limit = math.ceil(needed_bytes / PYROGRAM_CHUNK_SIZE)
-        
-        # Use Pyrogram's internal chunked download with offset
-        async for chunk in client.stream_media(message, limit=limit, offset=chunk_offset):
-            chunk_len = len(chunk)
-            
-            # Calculate overlap with requested range
-            chunk_start = current_offset
-            chunk_end = current_offset + chunk_len - 1
-            
-            # If chunk overlaps with requested range
-            if chunk_end >= start_byte and chunk_start <= end_byte:
-                overlap_start = max(0, start_byte - chunk_start)
-                overlap_end = min(chunk_len, end_byte - chunk_start + 1)
-                
-                yield chunk[overlap_start:overlap_end]
-                bytes_sent += (overlap_end - overlap_start)
-                
-                if bytes_sent >= total_bytes:
-                    break
-            
-            current_offset += chunk_len
-            
+        async for chunk in client.stream_media(msg, offset=chunk_offset, limit=needed):
+            data = bytes(chunk)
+            if first_chunk and skip_bytes:
+                data        = data[skip_bytes:]
+                first_chunk = False
+            remaining = target - bytes_sent
+            if len(data) > remaining:
+                data = data[:remaining]
+            if not data:
+                break
+            bytes_sent += len(data)
+            yield data
+            if bytes_sent >= target:
+                break
     except Exception as e:
-        print(f"[NexusEdu] Stream error: {e}")
-        raise HTTPException(status_code=500, detail=f"Stream failed: {str(e)}")
+        if "flood" in str(e).lower() or "FloodWait" in type(e).__name__:
+            print(f"[NexusEdu] Telegram FloodWait on stream: {e}", flush=True)
+        else:
+            print(f"[NexusEdu] Stream error: {e}", flush=True)
+
+def _parse_range(range_header: str, total: int) -> Tuple[int, int]:
+    """Parse 'bytes=X-Y' or 'bytes=X-' into (start, end)."""
+    try:
+        val   = range_header.replace("bytes=", "").strip()
+        parts = val.split("-")
+        start = int(parts[0]) if parts[0].strip() else 0
+        end   = int(parts[1]) if len(parts) > 1 and parts[1].strip() else total - 1
+        start = max(0, min(start, total - 1))
+        end   = max(start, min(end, total - 1))
+        return start, end
+    except (ValueError, IndexError):
+        return 0, total - 1
 
 @app.api_route("/api/stream/{video_id}", methods=["GET", "HEAD"])
 async def stream_video(video_id: str, request: Request, c: str = None, m: str = None, source: str = None):
     """
     Stream video from Telegram using MTProto (bypasses 20MB limit)
     """
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip + "_stream", limit=120, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many stream requests. Try again later.")
+
     try:
         # 1. Fetch video metadata from query params or map
         if c and m:
@@ -890,36 +866,24 @@ async def stream_video(video_id: str, request: Request, c: str = None, m: str = 
         
         # 3. Parse Range header
         range_header = request.headers.get("Range")
-        start_byte = 0
-        end_byte = file_size - 1
-        
-        if range_header:
-            range_str = range_header.replace("bytes=", "").strip()
-            if "-" in range_str:
-                start_str, end_str = range_str.split("-")
-                start_byte = int(start_str) if start_str else 0
-                end_byte = int(end_str) if end_str else file_size - 1
-        else:
-            # Without range, maybe limit it so it doesn't try to buffer 1GB immediately in Chrome on some profiles
-            end_byte = file_size - 1
-
-        start_byte = max(0, min(start_byte, file_size - 1))
-        end_byte = max(start_byte, min(end_byte, file_size - 1))
+        start, end = _parse_range(range_header or "", file_size)
 
         # Cap range size per request to 50MB to prevent memory exhaustion
         MAX_RANGE_SIZE = 50 * 1024 * 1024
-        if end_byte - start_byte + 1 > MAX_RANGE_SIZE:
-            end_byte = start_byte + MAX_RANGE_SIZE - 1
+        if end - start + 1 > MAX_RANGE_SIZE:
+            end = start + MAX_RANGE_SIZE - 1
+            
+        length = end - start + 1
 
         # 4. Stream chunks
         return StreamingResponse(
-            stream_telegram_chunks(tg_client, message, start_byte, end_byte),
+            _stream_telegram(channel_id, message_id, start, end, file_size),
             status_code=206 if range_header else 200,
             media_type=mime_type,
             headers={
                 "Accept-Ranges": "bytes",
-                "Content-Range": f"bytes {start_byte}-{end_byte}/{file_size}",
-                "Content-Length": str(end_byte - start_byte + 1),
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Content-Length": str(length),
                 "Content-Type": mime_type,
                 "Cache-Control": "public, max-age=31536000",
                 "X-Content-Type-Options": "nosniff",
@@ -942,37 +906,34 @@ async def test_stream(request: Request):
         if not total:
             raise HTTPException(500, "Test message has no media. Check channel.")
 
-        range_header = request.headers.get("range")
-        if range_header:
-            start, end = _parse_range(range_header, total)
-            length = end - start + 1
-            return StreamingResponse(
-                _stream_telegram(TEST_CHANNEL_ID, TEST_MESSAGE_ID, start, end, total),
-                status_code=206,
-                media_type=mime_type,
-                headers={
-                    "Content-Range":  f"bytes {start}-{end}/{total}",
-                    "Content-Length": str(length),
-                    "Accept-Ranges": "bytes",
-                    "Content-Type": mime_type,
-                    "Cache-Control": "no-cache",
-                },
-            )
-        else:
-            initial_end = min(total - 1, INITIAL_BUFFER - 1)
-            length = initial_end + 1
-            return StreamingResponse(
-                _stream_telegram(TEST_CHANNEL_ID, TEST_MESSAGE_ID, 0, initial_end, total),
-                status_code=206,
-                media_type=mime_type,
-                headers={
-                    "Content-Range":  f"bytes 0-{initial_end}/{total}",
-                    "Content-Length": str(length),
-                    "Accept-Ranges": "bytes",
-                    "Content-Type": mime_type,
-                    "Cache-Control": "no-cache",
-                },
-            )
+        range_header = request.headers.get("Range")
+        start, end = _parse_range(range_header or "", total)
+
+        # Cap range size per request to 50MB to prevent memory exhaustion
+        MAX_RANGE_SIZE = 50 * 1024 * 1024
+        if end - start + 1 > MAX_RANGE_SIZE:
+            end = start + MAX_RANGE_SIZE - 1
+            
+        length = end - start + 1
+
+        tg_client = get_active_client()
+        if not tg_client:
+            raise HTTPException(status_code=503, detail="No active Pyrogram client found")
+
+        # 4. Stream chunks using the exact same function as our main endpoint
+        return StreamingResponse(
+            _stream_telegram(TEST_CHANNEL_ID, TEST_MESSAGE_ID, start, end, total),
+            status_code=206 if range_header else 200,
+            media_type=mime_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Content-Length": str(length),
+                "Content-Type": mime_type,
+                "Cache-Control": "public, max-age=31536000",
+                "X-Content-Type-Options": "nosniff",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -982,5 +943,6 @@ async def test_stream(request: Request):
 
 # ─── RUN ──────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("[NexusEdu] Starting server on port 8080...")
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    print(f"[NexusEdu] Starting server on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)

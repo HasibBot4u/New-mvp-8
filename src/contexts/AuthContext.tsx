@@ -52,7 +52,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     mountedRef.current = true;
 
+    let bootGeneration = 0;
+
     const boot = async () => {
+      const currentGen = ++bootGeneration;
       try {
         const result = await withTimeout(supabase.auth.getSession(), 6000);
         if (!mountedRef.current) return;
@@ -62,14 +65,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession(s);
           setUser(s.user);
           const p = await fetchProfile(s.user);
-          if (mountedRef.current) setProfile(p);
+          if (mountedRef.current && currentGen === bootGeneration) setProfile(p);
         } else {
           setSession(null); setUser(null); setProfile(null);
         }
       } catch {
-        if (mountedRef.current) { setSession(null); setUser(null); setProfile(null); }
+        if (mountedRef.current && currentGen === bootGeneration) { setSession(null); setUser(null); setProfile(null); }
       } finally {
-        if (mountedRef.current) setIsLoading(false);
+        if (mountedRef.current && currentGen === bootGeneration) setIsLoading(false);
       }
     };
 
@@ -87,11 +90,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newSession?.user) {
         setSession(newSession);
         setUser(newSession.user);
+        const currentGen = ++bootGeneration;
         // Fetch profile asynchronously — do NOT await here (avoids stale closure bug)
         fetchProfile(newSession.user).then(p => {
-          if (mountedRef.current) setProfile(p);
+          if (mountedRef.current && currentGen === bootGeneration) setProfile(p);
         });
       } else if (event === 'SIGNED_OUT') {
+        ++bootGeneration;
         setSession(null); setUser(null); setProfile(null);
       }
       if (mountedRef.current) setIsLoading(false);

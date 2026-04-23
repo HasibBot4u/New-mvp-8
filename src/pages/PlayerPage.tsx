@@ -40,25 +40,8 @@ export function PlayerPage() {
   useEffect(() => {
     mountedRef.current = true;
     
-    // Anti-DevTools Protection
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // F12
-      if (e.key === 'F12') e.preventDefault();
-      // Ctrl+Shift+I (Windows) or Cmd+Opt+I (Mac)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) e.preventDefault();
-      // Ctrl+U (Windows) or Cmd+Opt+U (Mac) - View Source
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) e.preventDefault();
-      // Ctrl+Shift+J or Cmd+Opt+J - Console
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) e.preventDefault();
-      // Ctrl+Shift+C or Cmd+Opt+C - Element Inspector
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) e.preventDefault();
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
     return () => { 
       mountedRef.current = false; 
-      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
