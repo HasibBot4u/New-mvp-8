@@ -45,12 +45,6 @@ export default function PlayerPage() {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.access_token) setSessionToken(session.access_token);
-    });
-  }, []);
-
   let video: any, chapter: any;
   catalog?.subjects.forEach(s => s.cycles.forEach(c => c.chapters.forEach(ch =>
     ch.videos.forEach(v => { if (v.id === videoId) { video = v; chapter = ch; } })
@@ -58,6 +52,44 @@ export default function PlayerPage() {
 
   const source = video ? getVideoSource(video, sessionToken) : null;
 
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.access_token) {
+        setSessionToken(data.session.access_token);
+      }
+    });
+    
+    // Subscribe to auth changes (handles token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => {
+        if (newSession?.access_token) {
+          setSessionToken(newSession.access_token);
+          // If the video is playing and token refreshed, update the URL
+          if (video?.source_type === 'telegram' && videoRef.current) {
+            const currentTime = videoRef.current.currentTime;
+            const newUrl = getVideoSource(video, newSession.access_token).url;
+            if (videoRef.current.src !== newUrl) {
+                videoRef.current.src = newUrl;
+                // Restore playback position after source change
+                setTimeout(() => {
+                  if (videoRef.current) {
+                    try {
+                      videoRef.current.currentTime = currentTime;
+                      videoRef.current.play().catch(() => {});
+                    } catch {}
+                  }
+                }, 500);
+            }
+          }
+        }
+      }
+    );
+    
+    return () => subscription.unsubscribe();
+  }, [video]);
+
+  // Return early if no video
   // Wake telegram backend up on mount
   useEffect(() => {
     if (source?.type === "telegram") {

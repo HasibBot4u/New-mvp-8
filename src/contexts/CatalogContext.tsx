@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Subject, Cycle, Chapter, Video } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface CatalogChapter extends Chapter { videos: Video[]; }
 export interface CatalogCycle extends Cycle { chapters: CatalogChapter[]; }
@@ -92,7 +93,13 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  const { isLoading: authLoading, user } = useAuth();
+
+  useEffect(() => { 
+    if (!authLoading) {
+      refresh(); 
+    }
+  }, [refresh, authLoading, user]);
 
   return <CatalogCtx.Provider value={{ catalog, isLoading, error, refresh }}>{children}</CatalogCtx.Provider>;
 }

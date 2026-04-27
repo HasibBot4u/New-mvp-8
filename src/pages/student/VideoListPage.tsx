@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Lock, PlayCircle, Clock, KeyRound, Loader2 } from "lucide-react";
@@ -23,8 +23,14 @@ export default function VideoListPage() {
     if (ch.id === chapterId) { chapter = ch; cycle = cy; subject = s; }
   })));
 
-  const { hasAccess, submitCode } = useChapterAccess();
+  const { hasAccess, submitCode, checkAccess } = useChapterAccess();
   const hasChapterAccess = chapter?.id ? hasAccess(chapter.id) : null;
+
+  useEffect(() => {
+    if (chapter?.id) {
+       checkAccess(chapter.id);
+    }
+  }, [chapter?.id, checkAccess]);
 
   const formatCode = (raw: string) => {
     const stripped = raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 24);

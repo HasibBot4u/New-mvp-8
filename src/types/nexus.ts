@@ -61,7 +61,7 @@ export interface VideoBookmark {
 
 export interface EnrollmentCode {
   id: string; code: string; chapter_id: string | null;
-  max_uses: number; used_count: number; is_active: boolean;
+  max_uses: number; uses_count: number; is_active: boolean;
   expires_at: string | null; created_by: string | null; created_at: string;
 }
 
