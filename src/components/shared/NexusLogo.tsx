@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useSystemSettings } from '../../contexts/SystemSettingsContext';
+import { useSystemSettings } from '@/contexts/SystemSettingsContext';
 
 interface NexusLogoProps {
   className?: string;

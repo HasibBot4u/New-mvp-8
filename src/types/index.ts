@@ -80,7 +80,7 @@ export interface LiveClass {
 export interface EnrollmentCode {
   id: string; code: string; chapter_id: string;
   subject_id?: string; cycle_id?: string;
-  label?: string; notes?: string; max_uses: number;
+  label?: string; notes?: string; max_uses: number; uses_count: number;
   is_active: boolean; generated_by?: string; generated_at: string;
 }
 

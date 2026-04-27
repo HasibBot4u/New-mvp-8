@@ -9,11 +9,7 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake up Render backend
-        run: |
-          echo "Pinging backend at $(date)"
-          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
-            https://nexusedu-backend-0bjq.onrender.com/api/health \
-            --max-time 60 \
-            || echo "Backend was sleeping, pinging woke it up"
-          echo "Ping complete"
+      - name: Ping health endpoint
+        run: curl -sf https://nexusedu-backend-0bjq.onrender.com/api/health || true
+      - name: Ping warmup endpoint
+        run: curl -sf -X POST https://nexusedu-backend-0bjq.onrender.com/api/warmup || true

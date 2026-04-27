@@ -1,155 +1,126 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { CatalogProvider } from './contexts/CatalogContext';
-import { ToastProvider } from './components/ui/Toast';
-import { SystemSettingsProvider, useSystemSettings } from './contexts/SystemSettingsContext';
-import BottomNav from './components/layout/BottomNav';
-import { LoadingSpinner } from './components/shared/LoadingSpinner';
-import MaintenancePage from './pages/MaintenancePage';
-import { AdminLayout } from './pages/admin/AdminLayout';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-// Lazy load pages
-const LandingPage = React.lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
-const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
-const SignupPage = React.lazy(() => import('./pages/SignupPage'));
-const ForgotPasswordPage = React.lazy(() => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
-const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const CoursesPage = React.lazy(() => import('./pages/CoursesPage').then(m => ({ default: m.CoursesPage })));
-const SubjectPage = React.lazy(() => import('./pages/SubjectPage').then(m => ({ default: m.SubjectPage })));
-const ChaptersPage = React.lazy(() => import('./pages/ChaptersPage').then(m => ({ default: m.ChaptersPage })));
-const VideoListPage = React.lazy(() => import('./pages/VideoListPage').then(m => ({ default: m.VideoListPage })));
-const PlayerPage = React.lazy(() => import('./pages/PlayerPage').then(m => ({ default: m.PlayerPage })));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const NotesPage = React.lazy(() => import('./pages/NotesPage').then(m => ({ default: m.NotesPage })));
-const SearchPage = React.lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })));
-const NotificationsPage = React.lazy(() => import('./pages/NotificationsPage'));
-const LiveClassPage = React.lazy(() => import('./pages/LiveClassPage').then(m => ({ default: m.LiveClassPage })));
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CatalogProvider } from "@/contexts/CatalogContext";
+import { SystemSettingsProvider } from "@/contexts/SystemSettingsContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { PublicShell } from "@/components/public/PublicShell";
+import { StudentLayout } from "@/components/layout/StudentLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 
-const ProgressPage = React.lazy(() => import('./pages/ProgressPage'));
-const SuccessStoriesPage = React.lazy(() => import('./pages/SuccessStoriesPage').then(m => ({ default: m.SuccessStoriesPage })));
-const AboutPage = React.lazy(() => import('./pages/AboutPage'));
-const ContactPage = React.lazy(() => import('./pages/ContactPage'));
-const PrivacyPage = React.lazy(() => import('./pages/PrivacyPage'));
-const TermsPage = React.lazy(() => import('./pages/TermsPage'));
-const RefundPolicyPage = React.lazy(() => import('./pages/RefundPolicyPage'));
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
+import MaintenancePage from "./pages/MaintenancePage";
 
-// Admin Pages
-const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const AdminUsers = React.lazy(() => import('./pages/admin/AdminUsers').then(m => ({ default: m.AdminUsers })));
-const AdminContent = React.lazy(() => import('./pages/admin/AdminContent').then(m => ({ default: m.AdminContent })));
-const AdminSystem = React.lazy(() => import('./pages/admin/AdminSystem').then(m => ({ default: m.AdminSystem })));
-const AdminLogs = React.lazy(() => import('./pages/admin/AdminLogs').then(m => ({ default: m.AdminLogs })));
-const AdminEnrollment = React.lazy(() => import('./pages/admin/AdminEnrollment').then(m => ({ default: m.AdminEnrollment })));
+import LoginPage from "./pages/auth/LoginPage";
+import SignupPage from "./pages/auth/SignupPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
-function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) {
-  const { user, profile, isLoading: authLoading } = useAuth();
-  const { settings } = useSystemSettings();
+import AboutPage from "./pages/public/AboutPage";
+import ContactPage from "./pages/public/ContactPage";
+import PrivacyPage from "./pages/public/PrivacyPage";
+import TermsPage from "./pages/public/TermsPage";
+import RefundPolicyPage from "./pages/public/RefundPolicyPage";
+import SuccessStoriesPage from "./pages/public/SuccessStoriesPage";
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="w-10 h-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
-        <p className="mt-4 text-gray-500 bangla text-sm">লোড হচ্ছে...</p>
-      </div>
-    );
-  }
+import DashboardPage from "./pages/student/DashboardPage";
+import CoursesPage from "./pages/student/CoursesPage";
+import SubjectPage from "./pages/student/SubjectPage";
+import ChaptersPage from "./pages/student/ChaptersPage";
+import VideoListPage from "./pages/student/VideoListPage";
+import PlayerPage from "./pages/student/PlayerPage";
+import SearchPage from "./pages/student/SearchPage";
+import NotificationsPage from "./pages/student/NotificationsPage";
+import LivePage from "./pages/student/LivePage";
+import ProgressPage from "./pages/student/ProgressPage";
+import ProfilePage from "./pages/student/ProfilePage";
+import NotesPage from "./pages/student/NotesPage";
 
-  if (!user) return <Navigate to="/login" replace />;
-  if (settings?.maintenance_mode && profile?.role !== 'admin') return <MaintenancePage />;
-  if (profile?.is_blocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow p-8 text-center max-w-sm">
-          <p className="bangla text-xl font-bold text-red-600 mb-2">অ্যাকাউন্ট স্থগিত</p>
-          <p className="bangla text-gray-600">অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
-        </div>
-      </div>
-    );
-  }
-  if (requireAdmin && profile?.role !== 'admin') return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
-}
+import AdminDashboardPage from "./pages/admin/AdminDashboardPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminContentPage from "./pages/admin/AdminContentPage";
+import AdminCodesPage from "./pages/admin/AdminCodesPage";
+import AdminAnnouncementsPage from "./pages/admin/AdminAnnouncementsPage";
+import AdminLivePage from "./pages/admin/AdminLivePage";
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
+import AdminLogsPage from "./pages/admin/AdminLogsPage";
+import AdminSystemPage from "./pages/admin/AdminSystemPage";
+import AdminEnrollmentPage from "./pages/admin/AdminEnrollmentPage";
 
-function AppLayout() {
-  const { user } = useAuth();
-  const location = useLocation();
-  const isPlayerPage = location.pathname.includes('/player/');
-  
-  return (
-    <div className={`min-h-screen bg-gray-50 ${isPlayerPage ? '' : 'pb-16 md:pb-0'}`}>
-      <Outlet />
-      {user && !isPlayerPage && <BottomNav />}
-    </div>
-  );
-}
+const queryClient = new QueryClient();
 
-import { ErrorBoundary } from './components/ErrorBoundary';
-
-function App() {
-  return (
-    <ErrorBoundary>
-      <SystemSettingsProvider>
-        <AuthProvider>
-          <CatalogProvider>
-            <ToastProvider>
-              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Suspense fallback={
-                <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-                  <LoadingSpinner />
-                  <p className="mt-4 text-gray-500 bangla">লোড হচ্ছে...</p>
-                </div>
-              }>
-                <Routes>
-                  <Route path="/" element={<LandingPage />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/signup" element={<SignupPage />} />
-                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                  <Route path="/reset-password" element={<ResetPasswordPage />} />
-
+const App = () => (
+  <SystemSettingsProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <CatalogProvider>
+              <Routes>
+                {/* Public */}
+                <Route element={<PublicShell />}>
+                  <Route path="/" element={<Index />} />
                   <Route path="/about" element={<AboutPage />} />
                   <Route path="/contact" element={<ContactPage />} />
                   <Route path="/privacy" element={<PrivacyPage />} />
                   <Route path="/terms" element={<TermsPage />} />
-                  <Route path="/success-stories" element={<SuccessStoriesPage />} />
                   <Route path="/refund-policy" element={<RefundPolicyPage />} />
+                  <Route path="/success-stories" element={<SuccessStoriesPage />} />
+                </Route>
 
-                  <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/courses" element={<CoursesPage />} />
-                    <Route path="/subject/:slug" element={<SubjectPage />} />
-                    <Route path="/cycle/:cycleId" element={<ChaptersPage />} />
-                    <Route path="/chapter/:chapterId" element={<VideoListPage />} />
-                    <Route path="/watch/:videoId" element={<PlayerPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/notes" element={<NotesPage />} />
-                    <Route path="/search" element={<SearchPage />} />
-                    <Route path="/notifications" element={<NotificationsPage />} />
-                    <Route path="/live" element={<LiveClassPage />} />
-                    <Route path="/progress" element={<ProgressPage />} />
-                  </Route>
+                {/* Auth */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/maintenance" element={<MaintenancePage />} />
 
-                  <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
-                    <Route index element={<Navigate to="/admin/dashboard" replace />} />
-                    <Route path="dashboard" element={<AdminDashboard />} />
-                    <Route path="users" element={<AdminUsers />} />
-                    <Route path="content" element={<AdminContent />} />
-                    <Route path="enrollment" element={<AdminEnrollment />} />
-                    <Route path="system" element={<AdminSystem />} />
-                    <Route path="logs" element={<AdminLogs />} />
-                  </Route>
+                {/* Student app */}
+                <Route element={<ProtectedRoute><StudentLayout /></ProtectedRoute>}>
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/courses" element={<CoursesPage />} />
+                  <Route path="/subject/:subjectSlug" element={<SubjectPage />} />
+                  <Route path="/cycle/:cycleId" element={<ChaptersPage />} />
+                  <Route path="/chapter/:chapterId" element={<VideoListPage />} />
+                  <Route path="/watch/:videoId" element={<PlayerPage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/live" element={<LivePage />} />
+                  <Route path="/progress" element={<ProgressPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/notes" element={<NotesPage />} />
+                </Route>
 
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </ToastProvider>
-        </CatalogProvider>
-      </AuthProvider>
-    </SystemSettingsProvider>
-    </ErrorBoundary>
-  );
-}
+                {/* Admin */}
+                <Route element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
+                  <Route path="/admin" element={<AdminDashboardPage />} />
+                  <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+                  <Route path="/admin/users" element={<AdminUsersPage />} />
+                  <Route path="/admin/content" element={<AdminContentPage />} />
+                  <Route path="/admin/codes" element={<AdminCodesPage />} />
+                  <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
+                  <Route path="/admin/live" element={<AdminLivePage />} />
+                  <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                  <Route path="/admin/logs" element={<AdminLogsPage />} />
+                  <Route path="/admin/system" element={<AdminSystemPage />} />
+                  <Route path="/admin/enrollment" element={<AdminEnrollmentPage />} />
+                </Route>
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </CatalogProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </SystemSettingsProvider>
+);
 
 export default App;

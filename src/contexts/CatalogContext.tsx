@@ -1,210 +1,104 @@
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { CatalogData, CatalogSubject, CatalogCycle, CatalogChapter, CatalogVideo } from '../types';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { Subject, Cycle, Chapter, Video } from "@/types";
 
-interface CatalogContextType {
-  catalog: CatalogData | null;
+export interface CatalogChapter extends Chapter { videos: Video[]; }
+export interface CatalogCycle extends Cycle { chapters: CatalogChapter[]; }
+export interface CatalogSubject extends Subject { cycles: CatalogCycle[]; }
+export interface Catalog { subjects: CatalogSubject[]; totalVideos: number; }
+
+interface Ctx {
+  catalog: Catalog | null;
   isLoading: boolean;
   error: string | null;
-  refreshCatalog: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
-const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
+const CatalogCtx = createContext<Ctx | undefined>(undefined);
+const sb = supabase as any;
 
-// Fallback to static 'v1' instead of Date.now() so caching works without env variable
-const CACHE_KEY = `nexusedu_catalog_v${import.meta.env.VITE_BUILD_TIME || '1'}`;
-const CACHE_TTL = 10 * 60 * 1000;
+// Map raw DB rows (real columns) into the typed shape used by the app.
+const mapSubject = (r: any): Subject => ({
+  id: r.id, name: r.name, name_bn: r.name_bn, slug: r.slug,
+  icon: r.icon ?? null, color: r.color ?? null,
+  display_order: r.display_order ?? 0, is_active: r.is_active,
+  created_at: r.created_at,
+} as Subject);
+const mapCycle = (r: any): Cycle => ({
+  id: r.id, subject_id: r.subject_id, name: r.name, name_bn: r.name_bn,
+  display_order: r.display_order ?? 0, is_active: r.is_active,
+} as Cycle);
+const mapChapter = (r: any): Chapter => ({
+  id: r.id, cycle_id: r.cycle_id, name: r.name, name_bn: r.name_bn,
+  description: r.description,
+  requires_enrollment: !!r.requires_enrollment,
+  display_order: r.display_order ?? 0, is_active: r.is_active,
+} as Chapter);
+const mapVideo = (r: any): Video => ({
+  id: r.id, chapter_id: r.chapter_id, title: r.title, title_bn: r.title_bn,
+  source_type: r.source_type,
+  telegram_channel_id: r.telegram_channel_id,
+  telegram_message_id: r.telegram_message_id ? Number(r.telegram_message_id) : undefined,
+  youtube_video_id: r.youtube_video_id ?? null,
+  drive_file_id: r.drive_file_id,
+  duration: typeof r.duration === "string" ? r.duration : (r.duration ? String(r.duration) : undefined),
+  thumbnail_url: r.thumbnail_url,
+  display_order: r.display_order ?? 0, is_active: r.is_active,
+  size_mb: r.size_mb ?? null,
+} as Video);
 
-export const clearCatalogCache = () => {
-  try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
-};
 
-const loadCache = (): CatalogData | null => {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > CACHE_TTL) return null;
-    return data;
-  } catch { return null; }
-};
-
-const saveCache = (data: CatalogData) => {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
-  } catch { /* ignore */ }
-};
-
-/**
- * Fetch catalog directly from Supabase.
- * This is the primary source — does NOT depend on Render backend being awake.
- */
-async function fetchCatalogFromSupabase(signal?: AbortSignal): Promise<CatalogData> {
-  const fetchTask = async () => {
-    // Step 1: Fetch subjects
-    const { data: subjects, error: subErr } = await supabase
-      .from('subjects')
-      .select('id, name, name_bn, slug, icon, color, thumbnail_color, description, display_order')
-      .eq('is_active', true)
-      .order('display_order')
-      .abortSignal(signal as AbortSignal);
-    if (subErr) throw new Error(subErr.message);
-    if (!subjects || subjects.length === 0) {
-      return { subjects: [], total_videos: 0 };
-    }
-
-    // Step 2: Fetch cycles for these subjects
-    const subjectIds = subjects.map((s: any) => s.id);
-    const { data: cycles, error: cycErr } = await supabase
-      .from('cycles')
-      .select('id, subject_id, name, name_bn, telegram_channel_id, display_order')
-      .in('subject_id', subjectIds)
-      .eq('is_active', true)
-      .order('display_order')
-      .abortSignal(signal as AbortSignal);
-    if (cycErr) throw new Error(cycErr.message);
-
-    const cycleIds = (cycles || []).map((c: any) => c.id);
-    let chapters: any[] = [];
-    let videos: any[] = [];
-
-    if (cycleIds.length > 0) {
-      // Step 3: Fetch chapters
-      const { data: ch, error: chErr } = await supabase
-        .from('chapters')
-        .select('id, cycle_id, name, name_bn, requires_enrollment, display_order')
-        .in('cycle_id', cycleIds)
-        .eq('is_active', true)
-        .order('display_order')
-        .abortSignal(signal as AbortSignal);
-      if (chErr) throw new Error(chErr.message);
-      chapters = ch || [];
-
-      const chapterIds = chapters.map((c: any) => c.id);
-      if (chapterIds.length > 0) {
-        // Step 4: Fetch videos
-        const { data: vids, error: vidErr } = await supabase
-          .from('videos')
-          .select('id, chapter_id, title, title_bn, source_type, telegram_channel_id, telegram_message_id, youtube_video_id, drive_file_id, duration, size_mb, display_order')
-          .in('chapter_id', chapterIds)
-          .eq('is_active', true)
-          .order('display_order')
-          .abortSignal(signal as AbortSignal);
-        if (vidErr) throw new Error(vidErr.message);
-        videos = vids || [];
-      }
-    }
-
-    // Step 5: Build nested catalog structure
-    const videosByChapter: Record<string, CatalogVideo[]> = {};
-    for (const v of videos) {
-      if (!videosByChapter[v.chapter_id]) videosByChapter[v.chapter_id] = [];
-      videosByChapter[v.chapter_id].push(v as CatalogVideo);
-    }
-
-    const chaptersByCycle: Record<string, CatalogChapter[]> = {};
-    for (const ch of chapters) {
-      if (!chaptersByCycle[ch.cycle_id]) chaptersByCycle[ch.cycle_id] = [];
-      chaptersByCycle[ch.cycle_id].push({
-        ...ch,
-        videos: videosByChapter[ch.id] || [],
-      } as CatalogChapter);
-    }
-
-    const cyclesBySubject: Record<string, CatalogCycle[]> = {};
-    for (const cy of (cycles || [])) {
-      if (!cyclesBySubject[cy.subject_id]) cyclesBySubject[cy.subject_id] = [];
-      cyclesBySubject[cy.subject_id].push({
-        ...cy,
-        chapters: chaptersByCycle[cy.id] || [],
-      } as CatalogCycle);
-    }
-
-    const builtSubjects: CatalogSubject[] = subjects.map((s: any) => ({
-      ...s,
-      cycles: cyclesBySubject[s.id] || [],
-    }));
-
-    const totalVideos = videos.length;
-
-    return { subjects: builtSubjects, total_videos: totalVideos };
-  };
-
-  const timeoutPromise = new Promise<CatalogData>((_, reject) => 
-    setTimeout(() => reject(new Error('Catalog fetch timeout')), 12000)
-  );
-
-  return Promise.race([fetchTask(), timeoutPromise]);
-}
-
-export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [catalog, setCatalog] = useState<CatalogData | null>(() => loadCache());
-  const [isLoading, setIsLoading] = useState(!loadCache()); // skip loading if cache hit
+export function CatalogProvider({ children }: { children: ReactNode }) {
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const ctrlRef = useRef<AbortController | null>(null);
-
-  const fetchCatalog = useCallback(async (force = false) => {
-    if (ctrlRef.current) {
-      ctrlRef.current.abort();
-    }
-    ctrlRef.current = new AbortController();
-    const signal = ctrlRef.current.signal;
-
-    if (!force) {
-      const cached = loadCache();
-      if (cached) {
-        setCatalog(cached);
-        setIsLoading(false);
-        // Refresh in background silently
-        fetchCatalogFromSupabase(signal)
-          .then(fresh => { setCatalog(fresh); saveCache(fresh); setError(null); })
-          .catch(() => { /* silent background refresh failure is ok */ });
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    setError(null);
-
+  const refresh = useCallback(async () => {
+    setIsLoading(true); setError(null);
     try {
-      const data = await fetchCatalogFromSupabase(signal);
-      setCatalog(data);
-      saveCache(data);
-      setError(null);
-    } catch (err: any) {
-      console.error('[Catalog] fetch failed:', err.message);
-      const cached = loadCache();
-      if (cached) {
-        setCatalog(cached);
-        setError(null); // don't show error if we have cached data
-      } else {
-        setError('ডেটা লোড করতে সমস্যা হয়েছে। পেজ রিলোড করুন।');
+      const [s, c, ch, v] = await Promise.all([
+        sb.from("subjects").select("*").eq("is_active", true).order("display_order"),
+        sb.from("cycles").select("*").eq("is_active", true).order("display_order"),
+        sb.from("chapters").select("*").eq("is_active", true).order("display_order"),
+        sb.from("videos").select("*").eq("is_active", true).order("display_order"),
+      ]);
+      if (s.error || c.error || ch.error || v.error) {
+        throw s.error || c.error || ch.error || v.error;
       }
+      const subjects = (s.data ?? []).map(mapSubject);
+      const cycles = (c.data ?? []).map(mapCycle);
+      const chapters = (ch.data ?? []).map(mapChapter);
+      const videos = (v.data ?? []).map(mapVideo);
+
+      const built: CatalogSubject[] = subjects.map((subj: Subject) => ({
+        ...subj,
+        cycles: cycles
+          .filter((cy: Cycle) => cy.subject_id === subj.id)
+          .map((cy: Cycle) => ({
+            ...cy,
+            chapters: chapters
+              .filter((cp: Chapter) => cp.cycle_id === cy.id)
+              .map((cp: Chapter) => ({
+                ...cp,
+                videos: videos.filter((vi: Video) => vi.chapter_id === cp.id),
+              })),
+          })),
+      }));
+      setCatalog({ subjects: built, totalVideos: videos.length });
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load catalog");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchCatalog();
-  }, [fetchCatalog]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const refreshCatalog = useCallback(async () => {
-    clearCatalogCache();
-    await fetchCatalog(true);
-  }, [fetchCatalog]);
+  return <CatalogCtx.Provider value={{ catalog, isLoading, error, refresh }}>{children}</CatalogCtx.Provider>;
+}
 
-  return (
-    <CatalogContext.Provider value={{ catalog, isLoading, error, refreshCatalog }}>
-      {children}
-    </CatalogContext.Provider>
-  );
-};
-
-export const useCatalog = () => {
-  const ctx = useContext(CatalogContext);
-  if (!ctx) throw new Error('useCatalog must be used within CatalogProvider');
-  return ctx;
-};
+export function useCatalog() {
+  const v = useContext(CatalogCtx);
+  if (!v) throw new Error("useCatalog must be used inside <CatalogProvider>");
+  return v;
+}

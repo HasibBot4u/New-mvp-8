@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, PictureInPicture, Settings } from 'lucide-react';
-import { useToast } from '../ui/Toast';
-import { useVideoProgress } from '../../hooks/useVideoProgress';
+import { useToast } from '@/hooks/use-toast';
+import { useVideoProgress } from '@/hooks/useVideoProgress';
 import { WakeUpCountdown } from '../WakeUpCountdown';
-import { supabase } from '../../lib/supabase';
-import { getStreamUrl, clearBackendCache, api } from '../../lib/api';
+import { supabase } from '@/integrations/supabase/client';
+import { getStreamUrl, clearBackendCache, api } from '@/lib/api';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -37,7 +37,14 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
-  const { showToast } = useToast();
+  const { toast } = useToast();
+  const showToast = (msg: any) => {
+    if (typeof msg === 'string') {
+      toast({ description: msg });
+    } else {
+      toast(msg);
+    }
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -109,7 +116,7 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
             setNeedsWakeUp(true);
             setIsStarting(false);
             // Trigger warmup immediately
-            api.getWorkingBackend().then(backend => {
+            api.getWorkingBackend().then((backend: string) => {
               fetch(`${backend}/api/warmup`).catch(() => {});
             });
             return;
@@ -119,7 +126,7 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
         setNeedsWakeUp(true);
         setIsStarting(false);
         // Trigger warmup immediately
-        api.getWorkingBackend().then(b => {
+        api.getWorkingBackend().then((b: string) => {
           fetch(`${b}/api/warmup`).catch(() => {});
         });
         return;
@@ -200,7 +207,7 @@ export function VideoPlayer({ videoId, sizeMb = 0, onComplete, onTimeUpdate }: V
       if (videoRef.current) videoRef.current.playbackRate = parseFloat(savedSpeed);
     }
 
-    loadProgressFromSupabase().then(savedProgress => {
+    loadProgressFromSupabase().then((savedProgress: number) => {
       if (savedProgress > 30) {
         setResumeTime(savedProgress);
         setShowResumePrompt(true);

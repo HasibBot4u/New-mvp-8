@@ -1,27 +1,19 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import path from 'path'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/',
-  build: {
-    target: 'es2015',
-    outDir: 'dist',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          supabase: ['@supabase/supabase-js'],
-          ui: ['lucide-react', 'framer-motion'],
-          charts: ['recharts'],
-        }
+  resolve: {
+    alias: { "@": path.resolve(__dirname, "./src") }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:8000',
+        changeOrigin: true
       }
     }
   },
-  server: {
-    // Conditional HMR — works in both AI Studio and local dev (Bug N-060)
-    ...(process.env.VITE_AI_STUDIO ? {
-      hmr: { clientPort: 443, protocol: 'wss' }
-    } : {})
-  }
-});
+  build: { outDir: 'dist' }
+})

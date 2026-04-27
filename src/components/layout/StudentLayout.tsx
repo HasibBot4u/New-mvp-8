@@ -1,24 +1,49 @@
-import React, { useState } from 'react';
-import { Navbar } from './Navbar';
-import { Sidebar } from './Sidebar';
+import { Outlet, useLocation } from "react-router-dom";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { StudentSidebar } from "./StudentSidebar";
+import { StudentTopbar } from "./StudentTopbar";
+import { StudentBottomNav } from "./StudentBottomNav";
+import { BackendStatus } from "@/components/shared/BackendStatus";
 
-interface StudentLayoutProps {
-  children: React.ReactNode;
-}
+export function StudentLayout() {
+  const { pathname } = useLocation();
+  const isPlayer = pathname.startsWith("/watch/");
 
-export const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  if (isPlayer) {
+    // Full-bleed cinematic player — no shell chrome.
+    return (
+      <div className="min-h-screen bg-background">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-      
-      <div className="flex-1 flex flex-col md:ml-64 min-w-0 transition-all duration-300">
-        <Navbar onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="p-4 md:p-8 flex-1">
-          {children}
-        </main>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-background">
+        {/* Desktop sidebar (icon-collapsible). Hidden on mobile via shadcn primitive. */}
+        <StudentSidebar />
+
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Desktop sub-header w/ trigger + backend health */}
+          <div className="hidden md:flex items-center gap-3 h-12 px-4 border-b border-border/40 bg-background/80 backdrop-blur sticky top-0 z-30">
+            <SidebarTrigger />
+            <div className="flex-1" />
+            <BackendStatus />
+          </div>
+
+          {/* Mobile keeps the existing topbar (logo + search + bell + avatar) */}
+          <div className="md:hidden">
+            <StudentTopbar />
+          </div>
+
+          <main className="flex-1 pb-20 md:pb-0">
+            <Outlet />
+          </main>
+        </div>
+
+        <StudentBottomNav />
       </div>
-    </div>
+    </SidebarProvider>
   );
-};
+}

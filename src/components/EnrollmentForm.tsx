@@ -7,7 +7,7 @@ export const EnrollmentForm: React.FC = () => {
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { profile, refreshProfile } = useAuth();
+  const { profile, refresh } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +57,7 @@ export const EnrollmentForm: React.FC = () => {
       if (updateProfileError) throw updateProfileError;
 
       // 4. Refresh profile
-      await refreshProfile();
+      await refresh();
       
     } catch (err: any) {
       setError(err.message || 'Failed to enroll. Please try again.');

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, CheckCircle, X } from 'lucide-react';
-import { useChapterAccess } from '../../hooks/useChapterAccess';
+import { useChapterAccess } from '@/hooks/useChapterAccess';
 
 interface EnrollmentCodeModalProps {
   isOpen: boolean;

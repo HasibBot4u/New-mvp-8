@@ -11,42 +11,7 @@ async function fetchWithTimeout(url: string, ms: number, options?: RequestInit):
 export async function getWorkingBackend(): Promise<string> {
   const envUrl = import.meta.env.VITE_API_BASE_URL;
   if (!envUrl) throw new Error('VITE_API_BASE_URL is required');
-
-  const PRIMARY = envUrl.replace(/\/$/, '');
-  const REPLIT  = import.meta.env.VITE_REPLIT_URL || '';
-  const CACHE_KEY = 'nexusedu_working_backend';
-  const TTL = 5 * 60 * 1000;
-  
-  // Check cache
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const { url, ts } = JSON.parse(cached);
-      if (Date.now() - ts < TTL) return url;
-    }
-  } catch { /* ignore */ }
-  
-  // Try primary
-  try {
-    const r = await fetchWithTimeout(`${PRIMARY}/api/health`, 8000); // reduced timeout for health check
-    if (r.ok) {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ url: PRIMARY, ts: Date.now() }));
-      return PRIMARY;
-    }
-  } catch { /* ignore */ }
-  
-  // Try replit fallback
-  if (REPLIT) {
-    try {
-      const r = await fetchWithTimeout(`${REPLIT}/api/health`, 8000);
-      if (r.ok) {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ url: REPLIT, ts: Date.now() }));
-        return REPLIT;
-      }
-    } catch { /* ignore */ }
-  }
-  
-  throw new Error("No backend service is currently available");
+  return envUrl.replace(/\/$/, '');
 }
 
 export function clearBackendCache(): void {
@@ -66,7 +31,7 @@ export const getStreamUrl = (video: any): string => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
   if (!baseUrl) return '';
 
-  const workerUrl = import.meta.env.VITE_WORKER_URL || 'https://nexusedu-proxy.mdhosainp414.workers.dev';
+  const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
   
   // Default to telegram if source_type is missing or empty
   const sourceType = video.source_type || 'telegram';
@@ -84,12 +49,14 @@ export const getStreamUrl = (video: any): string => {
     }
     return url;
   } else if (sourceType === 'drive') {
+    if (!workerUrl) return ''; // Cannot stream drive without worker
     // Use Cloudflare Worker for Drive
     return `${workerUrl}/drive/${video.drive_file_id}`;
   } else if (sourceType === 'youtube') {
     return `https://www.youtube.com/embed/${video.youtube_video_id}?autoplay=1&controls=0&modestbranding=1&rel=0&disablekb=1`;
   }
   
+  // Fallback to empty if missing
   return '';
 };
 
@@ -102,7 +69,7 @@ export async function prefetchVideo(videoId: string): Promise<void> {
 export async function fetchBackendHealth(): Promise<Record<string, unknown>> {
   const backend = await getWorkingBackend().catch(() => null);
   if (!backend) return { status: 'offline', telegram: 'disconnected' };
-  const r = await fetchWithTimeout(`${backend}/api/health`, 15000); // Wait longer for backend
+  const r = await fetchWithTimeout(`${backend}/api/health`, 60000); // Wait longer for backend
   return r.json();
 }
 
@@ -115,7 +82,7 @@ export const api = {
   fetchBackendHealth,
   getCatalogWithCache: async () => {
     const backend = await getWorkingBackend();
-    const r = await fetchWithTimeout(`${backend}/api/catalog`, 40000);
+    const r = await fetchWithTimeout(`${backend}/api/catalog`, 60000);
     if (!r.ok) throw new Error('Failed to fetch catalog');
     return r.json();
   },
