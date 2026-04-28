@@ -8,7 +8,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CatalogProvider } from "@/contexts/CatalogContext";
 import { SystemSettingsProvider } from "@/contexts/SystemSettingsContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { PublicShell } from "@/components/public/PublicShell";
 import { StudentLayout } from "@/components/layout/StudentLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 
@@ -29,7 +28,6 @@ import RefundPolicyPage from "./pages/public/RefundPolicyPage";
 import SuccessStoriesPage from "./pages/public/SuccessStoriesPage";
 
 import DashboardPage from "./pages/student/DashboardPage";
-import CoursesPage from "./pages/student/CoursesPage";
 import SubjectPage from "./pages/student/SubjectPage";
 import ChaptersPage from "./pages/student/ChaptersPage";
 import VideoListPage from "./pages/student/VideoListPage";
@@ -65,15 +63,13 @@ const App = () => (
             <CatalogProvider>
               <Routes>
                 {/* Public */}
-                <Route element={<PublicShell />}>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/about" element={<AboutPage />} />
-                  <Route path="/contact" element={<ContactPage />} />
-                  <Route path="/privacy" element={<PrivacyPage />} />
-                  <Route path="/terms" element={<TermsPage />} />
-                  <Route path="/refund-policy" element={<RefundPolicyPage />} />
-                  <Route path="/success-stories" element={<SuccessStoriesPage />} />
-                </Route>
+                <Route path="/" element={<Index />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/contact" element={<ContactPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/refund-policy" element={<RefundPolicyPage />} />
+                <Route path="/success-stories" element={<SuccessStoriesPage />} />
 
                 {/* Auth */}
                 <Route path="/login" element={<LoginPage />} />
@@ -85,7 +81,6 @@ const App = () => (
                 {/* Student app */}
                 <Route element={<ProtectedRoute><StudentLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/courses" element={<CoursesPage />} />
                   <Route path="/subject/:subjectSlug" element={<SubjectPage />} />
                   <Route path="/cycle/:cycleId" element={<ChaptersPage />} />
                   <Route path="/chapter/:chapterId" element={<VideoListPage />} />

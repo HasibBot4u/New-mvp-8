@@ -14,20 +14,20 @@ export interface Profile {
 
 export interface Subject {
   id: string; name: string; name_bn: string | null; slug: string;
-  icon_name: string | null; color: string | null;
-  order_index: number; is_active: boolean;
+  icon: string | null; color: string | null;
+  display_order: number; is_active: boolean;
   created_at?: string;
 }
 
 export interface Cycle {
   id: string; subject_id: string; name: string; name_bn: string | null;
-  order_index: number; is_active: boolean;
+  display_order: number; is_active: boolean;
 }
 
 export interface Chapter {
   id: string; cycle_id: string; name: string; name_bn: string | null;
   slug: string | null; description: string | null;
-  requires_enrollment: boolean; order_index: number; is_active: boolean;
+  requires_enrollment: boolean; display_order: number; is_active: boolean;
 }
 
 export interface Video {
@@ -39,7 +39,7 @@ export interface Video {
   drive_file_id: string | null;
   duration_seconds: number | null;
   thumbnail_url: string | null;
-  order_index: number; is_active: boolean;
+  display_order: number; is_active: boolean;
   size_mb: number | null;
 }
 

@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sb = supabase as any;
     const { data } = await sb.from("profiles").select("*").eq("id", u.id).maybeSingle();
     const base: Profile = data
-      ? { ...(data as any), role: 'user' }
+      ? { ...(data as any) }
       : {
           id: u.id,
           email: u.email ?? "",
@@ -49,14 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           is_blocked: false,
         };
 
-    // Role lives in user_roles table (NOT on profiles).
-    const { data: roleRow } = await sb
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", u.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (roleRow) base.role = 'admin';
+    if (!base.role) base.role = 'user';
 
     return base;
   }, []);

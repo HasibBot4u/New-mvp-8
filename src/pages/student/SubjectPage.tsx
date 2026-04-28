@@ -1,14 +1,23 @@
 import { Link, useParams, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronRight, ArrowLeft, Layers } from "lucide-react";
+import { ChevronRight, ArrowLeft, Layers, Atom, FlaskConical, Sigma } from "lucide-react";
 import { useCatalog } from "@/contexts/CatalogContext";
 
+const IconMap: Record<string, React.ElementType> = {
+  Atom: Atom,
+  FlaskConical: FlaskConical,
+  Calculator: Sigma, // Map Calculator to Sigma
+  Sigma: Sigma
+};
+
 export default function SubjectPage() {
-  const { slug } = useParams();
+  const { subjectSlug } = useParams();
   const { catalog, isLoading } = useCatalog();
   if (isLoading) return <div className="container py-20 text-center text-foreground-muted">Loading…</div>;
-  const subject = catalog?.subjects.find(s => s.slug === slug);
-  if (!subject) return <Navigate to="/courses" replace />;
+  const subject = catalog?.subjects.find(s => s.slug === subjectSlug);
+  if (!subject) return <Navigate to="/dashboard" replace />; // Redirect to dashboard instead of courses
+
+  const IconComp = subject.icon && IconMap[subject.icon] ? IconMap[subject.icon] : null;
 
   return (
     <div>
@@ -16,14 +25,16 @@ export default function SubjectPage() {
       <div className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 opacity-30 blur-3xl" style={{ background: `radial-gradient(ellipse at top, ${subject.color}, transparent 60%)` }} />
         <div className="container relative py-14">
-          <Link to="/courses" className="inline-flex items-center gap-1.5 text-sm text-foreground-muted hover:text-foreground mb-6">
-            <ArrowLeft className="w-4 h-4" /> All courses
+          <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-foreground-muted hover:text-foreground mb-6">
+            <ArrowLeft className="w-4 h-4" /> ড্যাশবোর্ড
           </Link>
           <div className="flex items-start gap-5">
-            <span className="text-6xl">{subject.icon ?? "📚"}</span>
+            <span className="text-primary">
+               {IconComp ? <IconComp className="w-16 h-16" /> : "📚"}
+            </span>
             <div>
-              <h1 className="font-display text-4xl md:text-5xl font-bold tracking-tighter">{subject.name}</h1>
-              {subject.name_bn && <p className="font-bangla text-lg text-foreground-dim mt-1">{subject.name_bn}</p>}
+              <h1 className="font-display text-4xl md:text-5xl font-bold tracking-tighter">{subject.name_bn || subject.name}</h1>
+              {subject.name_bn && <p className="text-lg text-foreground-dim mt-1">{subject.name}</p>}
             </div>
           </div>
         </div>

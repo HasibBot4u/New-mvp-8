@@ -77,7 +77,9 @@ export default function PlayerPage() {
                     try {
                       videoRef.current.currentTime = currentTime;
                       videoRef.current.play().catch(() => {});
-                    } catch {}
+                    } catch (e) {
+                      console.error("Playback error during source swap:", e);
+                    }
                   }
                 }, 500);
             }
@@ -107,7 +109,7 @@ export default function PlayerPage() {
       .maybeSingle()
       .then(({ data }: any) => {
         if (data?.progress_seconds && videoRef.current) {
-          try { videoRef.current.currentTime = data.progress_seconds; } catch {}
+          try { videoRef.current.currentTime = data.progress_seconds; } catch (e) { console.error("Error setting time:", e); }
         }
       });
 
@@ -157,7 +159,7 @@ export default function PlayerPage() {
     setErrored(false);
     setCountdown(30);
     if (videoRef.current) {
-      try { videoRef.current.load(); videoRef.current.play().catch(() => {}); } catch {}
+      try { videoRef.current.load(); videoRef.current.play().catch(() => {}); } catch (e) { console.error("Retry playback error:", e); }
     }
   }, []);
 

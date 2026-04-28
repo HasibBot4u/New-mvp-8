@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Flame, Clock, CheckCircle2, Play, Pin, Calendar, Radio } from "lucide-react";
+import { Flame, Clock, CheckCircle2, Play, Pin, Calendar, Radio, Atom, FlaskConical, Sigma } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCatalog } from "@/contexts/CatalogContext";
 import { format } from "date-fns";
+
+const IconMap: Record<string, React.ElementType> = {
+  Atom: Atom,
+  FlaskConical: FlaskConical,
+  Calculator: Sigma, // Let's use Sigma for math
+  Sigma: Sigma
+};
 
 interface ContinueRow {
   video_id: string;
@@ -109,7 +116,7 @@ export default function DashboardPage() {
         <h1 className="font-display text-3xl md:text-4xl font-bold">
           আবার স্বাগতম, {profile?.display_name || "শিক্ষার্থী"}!
         </h1>
-        <div className="grid grid-cols-3 gap-3 max-w-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
           <Stat icon={<Flame className="w-4 h-4 text-warning" />} label="স্ট্রিক" value={`${streak} দিন`} />
           <Stat icon={<Clock className="w-4 h-4 text-info" />} label="দেখার সময়" value={formatHM(totalSeconds)} />
           <Stat icon={<CheckCircle2 className="w-4 h-4 text-success" />} label="সম্পন্ন" value={`${completed}`} />
@@ -156,16 +163,20 @@ export default function DashboardPage() {
         {subjectsWithCounts.length === 0 ? (
           <p className="text-foreground-muted text-sm">এখনো কোনো বিষয় নেই।</p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {subjectsWithCounts.map(s => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {subjectsWithCounts.map(s => {
+              const IconComp = s.icon && IconMap[s.icon] ? IconMap[s.icon] : null;
+              return (
               <Link key={s.id} to={`/subject/${s.slug}`}
                 className="relative rounded-2xl border border-white/5 bg-surface p-5 overflow-hidden group hover:border-primary/30 transition-all">
                 <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 blur-2xl group-hover:opacity-40 transition-opacity" style={{ background: s.color ?? "hsl(var(--primary))" }} />
-                <div className="text-3xl mb-3">{s.icon ?? "📚"}</div>
+                <div className="text-3xl mb-3 text-primary">
+                  {IconComp ? <IconComp className="w-8 h-8" /> : "📚"}
+                </div>
                 <p className="font-display font-semibold">{s.name_bn ?? s.name}</p>
                 <p className="text-xs text-foreground-muted mt-1">{s.videoCount} ভিডিও</p>
               </Link>
-            ))}
+            )})}
           </div>
         )}
       </section>

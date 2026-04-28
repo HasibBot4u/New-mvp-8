@@ -136,19 +136,24 @@ SET role = 'admin'
 WHERE email = 'mdhosainp414@gmail.com';
 
 -- 5. ERROR M: SEED TEST DATA
-INSERT INTO subjects (name, name_bn, slug, icon_name, color, order_index, is_active)
-VALUES
-  ('Physics', 'পদার্থবিজ্ঞান', 'physics', 'Atom', '#e50914', 1, true),
-  ('Chemistry', 'রসায়ন', 'chemistry', 'FlaskConical', '#f59e0b', 2, true),
-  ('Mathematics', 'গণিত', 'mathematics', 'Calculator', '#3b82f6', 3, true)
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO subjects (name, name_bn, icon, color, display_order, is_active)
+SELECT 'Physics', 'পদার্থবিজ্ঞান', 'Atom', '#e50914', 1, true
+WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE name = 'Physics');
 
-INSERT INTO cycles (subject_id, name, name_bn, order_index, is_active)
+INSERT INTO subjects (name, name_bn, icon, color, display_order, is_active)
+SELECT 'Chemistry', 'রসায়ন', 'FlaskConical', '#f59e0b', 2, true
+WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE name = 'Chemistry');
+
+INSERT INTO subjects (name, name_bn, icon, color, display_order, is_active)
+SELECT 'Mathematics', 'গণিত', 'Calculator', '#3b82f6', 3, true
+WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE name = 'Mathematics');
+
+INSERT INTO cycles (subject_id, name, name_bn, display_order, is_active)
 SELECT id, 'Cycle 1', 'সাইকেল ১', 1, true
-FROM subjects WHERE slug = 'physics'
-ON CONFLICT DO NOTHING;
+FROM subjects WHERE name = 'Physics'
+AND NOT EXISTS (SELECT 1 FROM cycles WHERE name = 'Cycle 1');
 
-INSERT INTO chapters (cycle_id, name, name_bn, slug, requires_enrollment, order_index, is_active)
-SELECT id, 'Chapter 1 - Motion', 'অধ্যায় ১ - গতি', 'motion', false, 1, true
+INSERT INTO chapters (cycle_id, name, name_bn, display_order, is_active)
+SELECT id, 'Chapter 1 - Motion', 'অধ্যায় ১ - গতি', 1, true
 FROM cycles WHERE name = 'Cycle 1'
-ON CONFLICT DO NOTHING;
+AND NOT EXISTS (SELECT 1 FROM chapters WHERE name = 'Chapter 1 - Motion');

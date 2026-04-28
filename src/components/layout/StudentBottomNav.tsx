@@ -1,11 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Atom, Bell, UserCircle2 } from "lucide-react";
+import { LayoutDashboard, Search, Bell, UserCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Mobile quick nav — mirrors a subset of the strict sidebar.
 const items = [
   { to: "/dashboard",       icon: LayoutDashboard, label: "ড্যাশবোর্ড" },
-  { to: "/subject/physics", icon: Atom,            label: "বিষয়" },
+  { to: "/search",          icon: Search,          label: "সার্চ" },
   { to: "/notifications",   icon: Bell,            label: "নোটিফিকেশন" },
   { to: "/profile",         icon: UserCircle2,     label: "প্রোফাইল" },
 ];

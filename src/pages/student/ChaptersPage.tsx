@@ -10,7 +10,7 @@ export default function ChaptersPage() {
 
   let cycle: any, subject: any;
   catalog?.subjects.forEach(s => s.cycles.forEach(cy => { if (cy.id === cycleId) { cycle = cy; subject = s; } }));
-  if (!cycle) return <Navigate to="/courses" replace />;
+  if (!cycle) return <Navigate to="/dashboard" replace />;
 
   return (
     <div>

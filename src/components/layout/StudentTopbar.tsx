@@ -12,10 +12,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/dashboard", label: "Home" },
-  { to: "/courses", label: "Courses" },
-  { to: "/live", label: "Live" },
-  { to: "/progress", label: "Progress" },
+  { to: "/dashboard", label: "ড্যাশবোর্ড" },
+  { to: "/subject/physics", label: "পদার্থবিজ্ঞান" },
+  { to: "/subject/chemistry", label: "রসায়ন" },
+  { to: "/subject/math", label: "উচ্চতর গণিত" },
 ];
 
 export function StudentTopbar() {
@@ -47,12 +47,14 @@ export function StudentTopbar() {
       scrolled ? "glass-strong border-b border-border/50" : "bg-background/80 backdrop-blur"
     )}>
       <div className="container flex items-center justify-between h-16">
-        <div className="flex items-center gap-8">
-          <NexusLogo />
+        <div className="flex items-center gap-4 md:gap-8">
+          <div className="scale-90 md:scale-100 origin-left">
+            <NexusLogo />
+          </div>
           <nav className="hidden md:flex items-center gap-1">
             {links.map(l => (
               <NavLink key={l.to} to={l.to} className={({ isActive }) => cn(
-                "px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors",
+                "px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors bangla",
                 isActive ? "text-foreground bg-background-overlay" : "text-foreground-muted hover:text-foreground"
               )}>{l.label}</NavLink>
             ))}

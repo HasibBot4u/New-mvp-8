@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function ProfilePage() {
-  const { profile, user, isAdmin, refresh } = useAuth();
+  const { profile, user, isAdmin, refresh, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [name, setName] = useState(profile?.display_name ?? "");
   const [phone, setPhone] = useState(profile?.phone ?? "");
   const [busy, setBusy] = useState(false);
@@ -23,6 +25,11 @@ export default function ProfilePage() {
     await refresh();
     toast({ title: "Profile updated" });
   };
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/", { replace: true });
+  }
 
   const initial = profile?.display_name?.charAt(0).toUpperCase() ?? "U";
   return (
@@ -44,10 +51,29 @@ export default function ProfilePage() {
       <div className="rounded-2xl p-7 bg-background-elevated border border-border space-y-4">
         <div className="space-y-2"><Label>Display name</Label><Input value={name} onChange={e => setName(e.target.value)} className="h-11" /></div>
         <div className="space-y-2"><Label>Phone</Label><Input value={phone} onChange={e => setPhone(e.target.value)} className="h-11" placeholder="+880…" /></div>
-        <Button onClick={save} disabled={busy} className="rounded-full bg-primary hover:bg-primary-glow font-semibold shadow-glow">
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save changes"}
-        </Button>
+        <div className="flex gap-3 pt-2">
+          <Button onClick={save} disabled={busy} className="rounded-full bg-primary hover:bg-primary-glow font-semibold shadow-glow">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save changes"}
+          </Button>
+          <Button onClick={handleSignOut} variant="outline" className="rounded-full border-white/10 hover:bg-white/5 text-destructive hover:text-destructive">
+            <LogOut className="w-4 h-4 mr-2" /> Sign out
+          </Button>
+        </div>
       </div>
+
+      {isAdmin && (
+        <div className="rounded-2xl p-7 bg-background-elevated border border-border border-l-4 border-l-accent flex items-center justify-between">
+          <div>
+            <h3 className="font-display font-semibold text-lg">Admin Control</h3>
+            <p className="text-sm text-foreground-muted">Manage users, content, and system settings.</p>
+          </div>
+          <Button asChild className="rounded-full bg-accent text-accent-foreground hover:bg-accent/90">
+            <Link to="/admin">
+              <ShieldCheck className="w-4 h-4 mr-2" /> Admin Panel
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

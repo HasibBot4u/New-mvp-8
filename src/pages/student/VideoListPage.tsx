@@ -53,7 +53,7 @@ export default function VideoListPage() {
 
 
   if (isLoading) return <div className="container py-20 text-center text-foreground-muted">Loading…</div>;
-  if (!chapter) return <Navigate to="/courses" replace />;
+  if (!chapter) return <Navigate to="/dashboard" replace />;
 
   return (
     <div>
