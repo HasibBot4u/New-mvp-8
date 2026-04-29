@@ -11,6 +11,8 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { StudentLayout } from "@/components/layout/StudentLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 
+import { PublicShell } from "@/components/public/PublicShell";
+
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import MaintenancePage from "./pages/MaintenancePage";
@@ -63,13 +65,15 @@ const App = () => (
             <CatalogProvider>
               <Routes>
                 {/* Public */}
-                <Route path="/" element={<Index />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/contact" element={<ContactPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="/terms" element={<TermsPage />} />
-                <Route path="/refund-policy" element={<RefundPolicyPage />} />
-                <Route path="/success-stories" element={<SuccessStoriesPage />} />
+                <Route element={<PublicShell />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/contact" element={<ContactPage />} />
+                  <Route path="/privacy" element={<PrivacyPage />} />
+                  <Route path="/terms" element={<TermsPage />} />
+                  <Route path="/refund-policy" element={<RefundPolicyPage />} />
+                  <Route path="/success-stories" element={<SuccessStoriesPage />} />
+                </Route>
 
                 {/* Auth */}
                 <Route path="/login" element={<LoginPage />} />

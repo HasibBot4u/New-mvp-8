@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Mail, MessageCircle, Send, Loader2 } from "lucide-react";
-import { PublicShell } from "@/components/public/PublicShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +30,7 @@ export default function ContactPage() {
   };
 
   return (
-    <PublicShell>
+    <>
       <section className="container max-w-5xl py-20">
         <p className="text-xs uppercase tracking-widest text-primary font-semibold mb-3">Get in touch</p>
         <h1 className="font-display text-5xl md:text-6xl font-bold tracking-tighter mb-12 text-gradient">
@@ -62,6 +61,6 @@ export default function ContactPage() {
           </form>
         </div>
       </section>
-    </PublicShell>
+    </>
   );
 }

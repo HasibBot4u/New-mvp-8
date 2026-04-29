@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { PublicShell } from "@/components/public/PublicShell";
 import { Star } from "lucide-react";
 
 const stories = [
@@ -13,7 +12,7 @@ const stories = [
 
 export default function SuccessStoriesPage() {
   return (
-    <PublicShell>
+    <>
       <section className="container max-w-6xl py-20">
         <p className="text-xs uppercase tracking-widest text-accent font-semibold mb-3">Stories</p>
         <h1 className="font-display text-5xl md:text-6xl font-bold tracking-tighter mb-3 text-gradient">
@@ -44,6 +43,6 @@ export default function SuccessStoriesPage() {
           ))}
         </div>
       </section>
-    </PublicShell>
+    </>
   );
 }

@@ -69,7 +69,7 @@ export async function prefetchVideo(videoId: string): Promise<void> {
 export async function fetchBackendHealth(): Promise<Record<string, unknown>> {
   const backend = await getWorkingBackend().catch(() => null);
   if (!backend) return { status: 'offline', telegram: 'disconnected' };
-  const r = await fetchWithTimeout(`${backend}/api/health`, 60000); // Wait longer for backend
+  const r = await fetchWithTimeout(`${backend}/api/health`, 8000); // 8 seconds timeout
   return r.json();
 }
 
@@ -82,7 +82,7 @@ export const api = {
   fetchBackendHealth,
   getCatalogWithCache: async () => {
     const backend = await getWorkingBackend();
-    const r = await fetchWithTimeout(`${backend}/api/catalog`, 60000);
+    const r = await fetchWithTimeout(`${backend}/api/catalog`, 15000); // 15 seconds timeout
     if (!r.ok) throw new Error('Failed to fetch catalog');
     return r.json();
   },

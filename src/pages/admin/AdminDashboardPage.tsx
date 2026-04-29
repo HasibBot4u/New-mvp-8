@@ -16,8 +16,6 @@ interface ActivityRow {
   profiles?: { display_name: string | null } | null;
 }
 
-const DEFAULT_BACKEND = "https://nexusedu-backend-0bjq.onrender.com";
-
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const { refresh: refreshCatalog } = useCatalog();
@@ -61,7 +59,7 @@ export default function AdminDashboardPage() {
 
   const checkBackend = async () => {
     try {
-      const url = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND).replace(/\/+$/, "");
+      const url = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/+$/, "");
       const res = await fetch(url + "/api/health");
       setHealth(res.ok);
     } catch { setHealth(false); }
@@ -69,7 +67,7 @@ export default function AdminDashboardPage() {
 
   const warmup = async () => {
     try {
-      const url = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND).replace(/\/+$/, "");
+      const url = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/+$/, "");
       const res = await fetch(url + "/api/warmup", { method: "POST" });
       if (res.ok) { toast({ title: "ক্যাটালগ রিফ্রেশ হয়েছে" }); refreshCatalog(); }
       else toast({ title: "ব্যর্থ", variant: "destructive" });
@@ -126,8 +124,8 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-surface p-5">
           <h2 className="font-display font-semibold mb-4">গত ৭ দিনের ভিউ</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height={256}>
               <BarChart data={chart}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="day" stroke="hsl(var(--foreground-muted))" fontSize={11} />

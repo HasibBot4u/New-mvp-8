@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, RotateCw, StickyNote, ChevronDown, ChevronUp } from "lucide-react";
 import { useCatalog } from "@/contexts/CatalogContext";
@@ -6,8 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useVideoProgress } from "@/hooks/useVideoProgress";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "https://nexusedu-backend-0bjq.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE_URL as string;
 
 type SourceKind = "youtube" | "drive" | "telegram";
 
@@ -33,7 +34,6 @@ export default function PlayerPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -44,13 +44,19 @@ export default function PlayerPage() {
   const [noteSaving, setNoteSaving] = useState(false);
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [duration, setDuration] = useState(0);
 
-  let video: any, chapter: any;
-  catalog?.subjects.forEach(s => s.cycles.forEach(c => c.chapters.forEach(ch =>
-    ch.videos.forEach(v => { if (v.id === videoId) { video = v; chapter = ch; } })
-  )));
+  const { video, chapter } = useMemo(() => {
+    let v: any, c: any;
+    catalog?.subjects.forEach(s => s.cycles.forEach(cyc => cyc.chapters.forEach(ch =>
+      ch.videos.forEach(vid => { if (vid.id === videoId) { v = vid; c = ch; } })
+    )));
+    return { video: v, chapter: c };
+  }, [catalog, videoId]);
 
   const source = video ? getVideoSource(video, sessionToken) : null;
+
+  const { handleTimeUpdate: updateProgressHook, loadProgressFromSupabase, saveProgressToSupabase } = useVideoProgress(videoId || '', duration);
 
   useEffect(() => {
     // Get initial session
@@ -65,31 +71,13 @@ export default function PlayerPage() {
       (_event, newSession) => {
         if (newSession?.access_token) {
           setSessionToken(newSession.access_token);
-          // If the video is playing and token refreshed, update the URL
-          if (video?.source_type === 'telegram' && videoRef.current) {
-            const currentTime = videoRef.current.currentTime;
-            const newUrl = getVideoSource(video, newSession.access_token).url;
-            if (videoRef.current.src !== newUrl) {
-                videoRef.current.src = newUrl;
-                // Restore playback position after source change
-                setTimeout(() => {
-                  if (videoRef.current) {
-                    try {
-                      videoRef.current.currentTime = currentTime;
-                      videoRef.current.play().catch(() => {});
-                    } catch (e) {
-                      console.error("Playback error during source swap:", e);
-                    }
-                  }
-                }, 500);
-            }
-          }
+          // Removed manual video source swapping to avoid resetting playback
         }
       }
     );
     
     return () => subscription.unsubscribe();
-  }, [video]);
+  }, []);
 
   // Return early if no video
   // Wake telegram backend up on mount
@@ -102,16 +90,12 @@ export default function PlayerPage() {
   // Load existing watch progress + notes
   useEffect(() => {
     if (!user || !video) return;
-    (supabase as any).from("watch_history")
-      .select("progress_seconds")
-      .eq("user_id", user.id)
-      .eq("video_id", video.id)
-      .maybeSingle()
-      .then(({ data }: any) => {
-        if (data?.progress_seconds && videoRef.current) {
-          try { videoRef.current.currentTime = data.progress_seconds; } catch (e) { console.error("Error setting time:", e); }
-        }
-      });
+    
+    loadProgressFromSupabase().then((progress) => {
+      if (videoRef.current && progress > 0) {
+        try { videoRef.current.currentTime = progress; } catch (e) { console.error("Error setting time:", e); }
+      }
+    });
 
     (supabase as any).from("video_notes")
       .select("content")
@@ -119,41 +103,17 @@ export default function PlayerPage() {
       .eq("video_id", video.id)
       .maybeSingle()
       .then(({ data }: any) => { if (data?.content) setNotes(data.content); });
-  }, [user, video]);
+  }, [user, video, loadProgressFromSupabase]);
 
   const handleTimeUpdate = useCallback(() => {
     if (!videoRef.current || !user || !video) return;
-    const currentTime = Math.floor(videoRef.current.currentTime);
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(async () => {
-      const duration = Math.floor(videoRef.current?.duration || 0);
-      const completed = duration > 0 && currentTime / duration >= 0.9;
-      const percent = duration > 0 ? Math.min(100, Math.floor((currentTime / duration) * 100)) : 0;
-      await (supabase as any).from("watch_history").upsert({
-        user_id: user.id,
-        video_id: video.id,
-        progress_seconds: currentTime,
-        progress_percent: percent,
-        completed,
-        updated_at: new Date().toISOString(),
-        watched_at: new Date().toISOString(),
-      }, { onConflict: "user_id,video_id" });
-    }, 5000);
-  }, [user, video]);
+    updateProgressHook(videoRef.current.currentTime);
+  }, [user, video, updateProgressHook]);
 
   const handleVideoEnded = useCallback(async () => {
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
     if (!user || !video) return;
-    await (supabase as any).from("watch_history").upsert({
-      user_id: user.id,
-      video_id: video.id,
-      progress_seconds: Math.floor(videoRef.current?.duration || 0),
-      progress_percent: 100,
-      completed: true,
-      updated_at: new Date().toISOString(),
-      watched_at: new Date().toISOString(),
-    }, { onConflict: "user_id,video_id" });
-  }, [user, video]);
+    await saveProgressToSupabase(videoRef.current?.duration || 0, videoRef.current?.duration || 0);
+  }, [user, video, saveProgressToSupabase]);
 
   const retryPlayback = useCallback(() => {
     setErrored(false);
@@ -203,7 +163,6 @@ export default function PlayerPage() {
   // Cleanup
   useEffect(() => {
     return () => {
-      if (saveTimeout.current) clearTimeout(saveTimeout.current);
       if (noteSaveTimeout.current) clearTimeout(noteSaveTimeout.current);
       if (retryTimer.current) clearInterval(retryTimer.current);
     };
@@ -260,6 +219,7 @@ export default function PlayerPage() {
               autoPlay
               preload="auto"
               className="w-full h-full"
+              onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleVideoEnded}
               onError={handleVideoError}

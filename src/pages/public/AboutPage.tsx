@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { PublicShell } from "@/components/public/PublicShell";
 import { Sparkles, Target, HeartHandshake, Trophy } from "lucide-react";
 
 const values = [
@@ -11,7 +10,7 @@ const values = [
 
 export default function AboutPage() {
   return (
-    <PublicShell>
+    <>
       <section className="container max-w-4xl py-20">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
           <p className="text-xs uppercase tracking-widest text-primary font-semibold mb-3">About</p>
@@ -40,6 +39,6 @@ export default function AboutPage() {
           ))}
         </div>
       </section>
-    </PublicShell>
+    </>
   );
 }

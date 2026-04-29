@@ -1,22 +1,32 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { getDeviceFingerprint } from './useDeviceFingerprint';
 
 export function useChapterAccess() {
-  const [accessMap, setAccessMap] = useState<Record<string, boolean>>({});
+  const [accessMap, setAccessMap] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('nexus_access_map');
+      if (stored) return JSON.parse(stored);
+    } catch (e) { console.debug(e); }
+    return {};
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   const checkAccess = useCallback(async (chapterId: string) => {
     try {
       const fingerprint = await getDeviceFingerprint();
-      const { data, error } = await supabase.rpc('check_chapter_access', {
+      const { data, error } = await (supabase as any).rpc('check_chapter_access', {
         p_chapter_id: chapterId,
         p_device_fingerprint: fingerprint
       });
 
       if (error) throw error;
 
-      setAccessMap(prev => ({ ...prev, [chapterId]: !!data }));
+      setAccessMap(prev => {
+        const next = { ...prev, [chapterId]: !!data };
+        try { localStorage.setItem('nexus_access_map', JSON.stringify(next)); } catch (e) { console.debug(e); }
+        return next;
+      });
       return !!data;
     } catch (error) {
       console.error('Error checking chapter access:', error);
@@ -27,8 +37,8 @@ export function useChapterAccess() {
   const checkBatchAccess = useCallback(async (chapterIds: string[]) => {
     setIsLoading(true);
     try {
-      const results = await Promise.all(chapterIds.map(id => checkAccess(id)));
-      return results;
+    const results = await Promise.allSettled(chapterIds.map(id => checkAccess(id)));
+    return results;
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +77,7 @@ export function useChapterAccess() {
       
       const normalizedCode = normalizeCode(code);
 
-      const { data, error } = await supabase.rpc('use_chapter_enrollment_code', {
+      const { data, error }: { data: any, error: any } = await (supabase as any).rpc('use_chapter_enrollment_code', {
         p_code: normalizedCode,
         p_chapter_id: chapterId,
         p_device_fingerprint: fingerprint,
@@ -79,7 +89,11 @@ export function useChapterAccess() {
       if (error) throw error;
 
       if (data && data.success) {
-        setAccessMap(prev => ({ ...prev, [chapterId]: true }));
+        setAccessMap(prev => {
+          const next = { ...prev, [chapterId]: true };
+          try { localStorage.setItem('nexus_access_map', JSON.stringify(next)); } catch (e) { console.debug(e); }
+          return next;
+        });
       }
 
       return {

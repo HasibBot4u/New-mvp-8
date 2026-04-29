@@ -63,7 +63,7 @@ DECLARE
   v_access_exists boolean;
 BEGIN
   SELECT * INTO v_code_record FROM enrollment_codes 
-  WHERE code = p_code AND active = true AND (max_uses = 0 OR uses_count < max_uses);
+  WHERE code = p_code AND is_active = true AND (max_uses = 0 OR uses_count < max_uses);
 
   IF NOT FOUND THEN
     RETURN '{"success": false, "message_bn": "কোডটি অবৈধ বা মেয়াদোত্তীর্ণ"}'::jsonb;

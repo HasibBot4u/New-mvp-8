@@ -4,7 +4,6 @@ import { ArrowRight, Play, Atom, Sparkles, ShieldCheck, Smartphone, Users } from
 import { HeroCanvas } from "@/components/three/HeroCanvas";
 import { Button } from "@/components/ui/button";
 import { useCatalog } from "@/contexts/CatalogContext";
-import { PublicShell } from "@/components/public/PublicShell";
 
 const features = [
   { icon: Sparkles, title: "Curated cycles", desc: "Lessons grouped into focused cycles & chapters — no overwhelm." },
@@ -18,8 +17,7 @@ const Index = () => {
   const displaySubjects = catalog?.subjects || [];
 
   return (
-    <PublicShell>
-      <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
         {/* HERO ============================================================= */}
       <section className="relative min-h-screen flex items-center pt-24">
         <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
@@ -184,7 +182,6 @@ const Index = () => {
         </div>
       </section>
     </div>
-    </PublicShell>
   );
 };
 

@@ -4,8 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
-const DEFAULT_BACKEND = "https://nexusedu-backend-0bjq.onrender.com";
-
 export default function AdminSystemPage() {
   const { toast } = useToast();
   const { refreshSettings } = useSystemSettings();
@@ -14,7 +12,7 @@ export default function AdminSystemPage() {
   const [allowReg, setAllowReg] = useState(true);
   const [platformName, setPlatformName] = useState("NexusEdu");
   const [color, setColor] = useState("#e50914");
-  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND);
+  const [backendUrl, setBackendUrl] = useState(import.meta.env.VITE_API_BASE_URL as string);
   const [loading, setLoading] = useState(true);
 
   const [healthLoading, setHealthLoading] = useState(false);
@@ -31,7 +29,7 @@ export default function AdminSystemPage() {
       if (map.platform_color?.color) setColor(map.platform_color.color);
       if (map.backend_url?.url) setBackendUrl(map.backend_url.url);
       setLoading(false);
-      checkHealth(map.backend_url?.url ?? DEFAULT_BACKEND);
+      checkHealth(map.backend_url?.url ?? import.meta.env.VITE_API_BASE_URL as string);
     })();
     // eslint-disable-next-line
   }, []);

@@ -15,10 +15,9 @@ interface VideoRow {
 }
 
 const sb = supabase as any;
-const DEFAULT_BACKEND = "https://nexusedu-backend-0bjq.onrender.com";
 
 const warmupBackend = () => {
-  const url = (import.meta.env.VITE_API_BASE_URL || DEFAULT_BACKEND).replace(/\/+$/, "");
+  const url = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/+$/, "");
   fetch(url + "/api/warmup", { method: "POST" }).catch(() => {});
 };
 

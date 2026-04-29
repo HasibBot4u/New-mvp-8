@@ -62,7 +62,7 @@ export async function importFromGoogleSheets(sheetUrl: string): Promise<VideoShe
 }
 
 export async function syncFromSheetsToDatabase(rows: VideoSheetRow[]): Promise<void> {
-  const { supabase } = await import('./supabase');
+  const { supabase } = await import('@/integrations/supabase/client');
   const batchSize = 100;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
@@ -81,7 +81,7 @@ export async function syncFromSheetsToDatabase(rows: VideoSheetRow[]): Promise<v
     }));
     const { error } = await supabase
       .from('videos')
-      .upsert(updates, { onConflict: 'id' });
+      .upsert(updates as any, { onConflict: 'id' });
     if (error) {
       throw new Error(`Batch ${i} failed: ${error.message}`);
     }

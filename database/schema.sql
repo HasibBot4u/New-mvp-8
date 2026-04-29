@@ -145,7 +145,7 @@ CREATE POLICY "admin_all" ON videos FOR ALL USING (public.is_admin());
 
 -- Profiles policies
 CREATE POLICY "auth_read_all" ON profiles FOR SELECT USING (
-  auth.role() = 'authenticated'
+  id = auth.uid() OR public.is_admin()
 );
 CREATE POLICY "users_update_own" ON profiles FOR UPDATE USING (id = auth.uid());
 -- We can use is_admin() for UPDATE/DELETE because those don't trigger the SELECT policy loop
@@ -157,7 +157,7 @@ CREATE POLICY "users_manage_own" ON watch_history FOR ALL USING (user_id = auth.
 CREATE POLICY "admin_read_all" ON watch_history FOR SELECT USING (public.is_admin());
 
 -- Activity logs policies
-CREATE POLICY "anyone_insert" ON activity_logs FOR INSERT WITH CHECK (true);
+CREATE POLICY "anyone_insert" ON activity_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "admin_read_all" ON activity_logs FOR SELECT USING (public.is_admin());
 
 -- TRIGGERS

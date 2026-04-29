@@ -585,12 +585,24 @@ def check_rate_limit(client_ip: str, limit: int = 5, window_seconds: int = 60) -
 
 
 @app.get("/api/catalog")
-async def catalog():
+async def catalog(authorization: str = Header(None)):
+    auth_val = authorization
+    user = await verify_supabase_token(auth_val)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
     now = time.time()
-    if (catalog_cache["data"] is None
-            or now - catalog_cache["timestamp"] > CATALOG_TTL):
+    async with catalog_lock:
+        data = catalog_cache["data"]
+        ts = catalog_cache["timestamp"]
+        
+    if data is None or now - ts > CATALOG_TTL:
         await refresh_catalog()
-    return catalog_cache["data"] or {"subjects": [], "total_videos": 0}
+        async with catalog_lock:
+            data = catalog_cache["data"]
+            
+    # We already removed channel_id and message_id from the JSON returned in refresh_catalog
+    return data or {"subjects": [], "total_videos": 0}
 
 
 _last_refresh_time = 0.0
@@ -724,8 +736,6 @@ from fastapi import FastAPI, HTTPException, Request, Header
 async def stream_video(
     video_id: str,
     request: Request,
-    c: str = None,
-    m: str = None,
     source: str = None,
     token: str = None,
     authorization: str = Header(None)
@@ -746,23 +756,17 @@ async def stream_video(
         raise HTTPException(status_code=429, detail="Too many stream requests. Try again later.")
 
     try:
-        # 1. Fetch video metadata from query params or map
-        if c and m:
-            channel_id_str = c
-            message_id_str = m
-            source_type = source or "telegram"
-        else:
-            if video_id not in video_map:
-                await refresh_catalog()
-            if video_id not in video_map:
-                raise HTTPException(status_code=404, detail="Video not found in active catalog. Provide c and m parameters.")
-            
-            video = video_map[video_id]
-            source_type = video.get("source_type", "telegram")
-            channel_id_str = video.get("channel_id", "")
-            message_id_str = video.get("message_id", 0)
-            
-            if source_type == "drive":
+        if video_id not in video_map:
+            await refresh_catalog()
+        if video_id not in video_map:
+            raise HTTPException(status_code=404, detail="Video not found in active catalog.")
+        
+        video = video_map[video_id]
+        source_type = video.get("source_type", "telegram")
+        channel_id_str = video.get("channel_id", "")
+        message_id_str = video.get("message_id", 0)
+        
+        if source_type == "drive":
                 drive_file_id = video.get("drive_file_id")
                 if not drive_file_id:
                     raise HTTPException(status_code=400, detail="Drive file ID missing")

@@ -34,16 +34,9 @@ export default function AdminUsersPage() {
       query = query.or(`email.ilike.${term},display_name.ilike.${term}`);
     }
     const { data, count } = await query.range(from, to);
-    const list = (data ?? []) as UserRow[];
+    const list = (data ?? []) as any[];
 
-    // Fetch admin roles for visible users
-    const ids = list.map(u => u.id);
-    let admins: Set<string> = new Set();
-    if (ids.length) {
-      const { data: roles } = await sb.from("user_roles").select("user_id").eq("role", "admin").in("user_id", ids);
-      admins = new Set((roles ?? []).map((r: any) => r.user_id));
-    }
-    setRows(list.map(u => ({ ...u, isAdmin: admins.has(u.id) })));
+    setRows(list.map(u => ({ ...u, isAdmin: u.role === "admin" })));
     setTotal(count ?? 0);
     setLoading(false);
   };
@@ -57,10 +50,10 @@ export default function AdminUsersPage() {
   };
   const toggleAdmin = async (r: UserRow) => {
     if (r.isAdmin) {
-      await sb.from("user_roles").delete().eq("user_id", r.id).eq("role", "admin");
+      await sb.from("profiles").update({ role: "student" }).eq("id", r.id);
       toast({ title: "Admin removed" });
     } else {
-      await sb.from("user_roles").insert({ user_id: r.id, role: "admin" });
+      await sb.from("profiles").update({ role: "admin" }).eq("id", r.id);
       toast({ title: "Admin granted" });
     }
     load();

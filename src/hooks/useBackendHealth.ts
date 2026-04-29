@@ -30,7 +30,7 @@ export function useBackendHealth(autoRefreshSeconds = 30) {
   const check = useCallback(async () => {
     setStatus(prev => ({ ...prev, isLoading: true, error: null }));
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 45000);
+    const timer = setTimeout(() => controller.abort(), 8000);
     try {
       const backend = await getWorkingBackend();
       const res = await fetch(`${backend}/api/health`, {

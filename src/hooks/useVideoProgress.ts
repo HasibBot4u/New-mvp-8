@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '../contexts/AuthContext';
 
 export function useVideoProgress(videoId: string, duration: number) {
@@ -40,6 +40,10 @@ export function useVideoProgress(videoId: string, duration: number) {
 
   const hasIncrementedRef = useRef(false);
 
+  useEffect(() => {
+    hasIncrementedRef.current = false;
+  }, [videoId]);
+
   const saveProgressToSupabase = useCallback(async (currentTime: number, currentDuration: number) => {
     if (!user || !videoId || currentDuration <= 0) return;
     
@@ -60,7 +64,7 @@ export function useVideoProgress(videoId: string, duration: number) {
       if (!error && !hasIncrementedRef.current && currentTime > 0) {
         hasIncrementedRef.current = true;
         try {
-          await supabase.rpc('increment_watch_count', {
+          await (supabase as any).rpc('increment_watch_count', {
             p_user_id: user.id,
             p_video_id: videoId
           });
