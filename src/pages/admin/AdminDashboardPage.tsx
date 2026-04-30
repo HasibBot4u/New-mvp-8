@@ -28,22 +28,22 @@ export default function AdminDashboardPage() {
   const loadAll = async () => {
     setLoading(true);
     const [s, h, a] = await Promise.all([
-      (supabase as any).rpc("get_admin_stats"),
+      supabase.rpc("get_admin_stats"),
       loadChart(),
-      (supabase as any).from("activity_logs")
+      supabase.from("activity_logs")
         .select("id, action, created_at, user_id, profiles(display_name)")
         .order("created_at", { ascending: false }).limit(10),
     ]);
-    if (s.data) setStats(s.data as Stats);
+    if (s.data) setStats(s.data as unknown as Stats);
     setChart(h);
-    setActivity((a.data ?? []) as ActivityRow[]);
+    setActivity((a.data ?? []) as unknown as ActivityRow[]);
     setLoading(false);
     checkBackend();
   };
 
   const loadChart = async () => {
     const since = startOfDay(subDays(new Date(), 6)).toISOString();
-    const { data } = await (supabase as any).from("watch_history")
+    const { data } = await supabase.from("watch_history")
       .select("watched_at").gte("watched_at", since);
     const buckets: Record<string, number> = {};
     for (let i = 6; i >= 0; i--) {
@@ -60,7 +60,10 @@ export default function AdminDashboardPage() {
   const checkBackend = async () => {
     try {
       const url = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/+$/, "");
-      const res = await fetch(url + "/api/health");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000); // 10 seconds
+      const res = await fetch(url + "/api/health", { signal: controller.signal });
+      clearTimeout(timer);
       setHealth(res.ok);
     } catch { setHealth(false); }
   };
@@ -74,7 +77,10 @@ export default function AdminDashboardPage() {
     } catch (e: any) { toast({ title: "ব্যর্থ", description: e.message, variant: "destructive" }); }
   };
 
-  useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { 
+    loadAll(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const watchHours = stats ? Math.round(stats.total_watch_seconds / 360) / 10 : 0;
 

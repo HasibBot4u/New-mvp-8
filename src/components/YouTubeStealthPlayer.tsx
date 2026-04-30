@@ -42,7 +42,6 @@ export const YouTubeStealthPlayer = forwardRef<YouTubeStealthPlayerRef, Props>(
           setIsApiReady(true);
         };
       } else {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsApiReady(true);
       }
     }, []);
@@ -103,6 +102,7 @@ export const YouTubeStealthPlayer = forwardRef<YouTubeStealthPlayerRef, Props>(
           playerRef.current.destroy();
         }
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isApiReady, videoId]);
 
     // 3. Expose Methods

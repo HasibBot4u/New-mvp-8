@@ -21,7 +21,7 @@ def _require_env(key: str) -> str:
     val = os.environ.get(key, "").strip()
     if not val:
         print(f"[NexusEdu] FATAL: {key} environment variable is not set. Backend cannot start.", flush=True)
-        # Don't crash — return empty string and handle gracefully
+        sys.exit(1)
     return val
 
 API_ID_STR  = _require_env("TELEGRAM_API_ID")
@@ -96,10 +96,21 @@ catalog_lock = asyncio.Lock()
 
 # ─── TELEGRAM HELPERS ─────────────────────────────────────────
 
+import time
+
+_TOKEN_CACHE = {}
+
 async def verify_supabase_token(authorization: str) -> dict | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization[7:]
+    
+    now = time.time()
+    if token in _TOKEN_CACHE:
+        cached_user, expires_at = _TOKEN_CACHE[token]
+        if now < expires_at:
+            return cached_user
+
     try:
         supabase_url = os.environ.get("SUPABASE_URL")
         service_key = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -108,7 +119,11 @@ async def verify_supabase_token(authorization: str) -> dict | None:
                 f"{supabase_url}/auth/v1/user",
                 headers={"Authorization": f"Bearer {token}", "apikey": service_key}
             )
-            return resp.json() if resp.status_code == 200 else None
+            if resp.status_code == 200:
+                user_data = resp.json()
+                _TOKEN_CACHE[token] = (user_data, now + 300)
+                return user_data
+            return None
     except Exception:
         return None
 
@@ -122,25 +137,29 @@ async def resolve_channel(channel_id: int | str) -> bool:
             return False
         await client.get_chat(cid)
         resolved_channels.add(cid)
-        print(f"[NexusEdu] Resolved channel {cid}")
+        print(f"[System] Resolved channel {cid}")
         return True
     except Exception as e:
-        print(f"[NexusEdu] Could not resolve {cid}: {e}")
+        print(f"[System] Could not resolve {cid}: {e}")
         return False
 
 
 async def preload_channels():
     try:
+        from pyrogram.enums import ChatType
         client = get_active_client()
         if client is None: return
+        count = 0
         async for dialog in client.get_dialogs():
             try:
-                resolved_channels.add(dialog.chat.id)
+                if dialog.chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP, ChatType.GROUP]:
+                    resolved_channels.add(dialog.chat.id)
+                    count += 1
             except Exception:
                 pass
-        print(f"[NexusEdu] {len(resolved_channels)} channels loaded from dialogs.")
+        print(f"[System] {count} channels/groups loaded from dialogs.")
     except Exception as e:
-        print(f"[NexusEdu] Dialog preload error: {e}")
+        print(f"[System] Dialog preload error: {e}")
 
 
 async def get_message(channel_id: int, message_id: int):
@@ -231,12 +250,17 @@ async def fetch_supabase(path: str, client: httpx.AsyncClient) -> list:
         "apikey":        SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
     }
-    r = await client.get(
-        f"{SUPABASE_URL}/rest/v1/{path}", headers=headers, timeout=30
-    )
-    r.raise_for_status()
-    return r.json()
-
+    for attempt in range(3):
+        try:
+            r = await client.get(
+                f"{SUPABASE_URL}/rest/v1/{path}", headers=headers, timeout=30
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception:
+            if attempt == 2:
+                raise
+            await asyncio.sleep(2 ** attempt)
 
 async def fetch_all_videos(client: httpx.AsyncClient) -> list:
     """Paginated — handles 1,458+ videos reliably."""
@@ -252,9 +276,17 @@ async def fetch_all_videos(client: httpx.AsyncClient) -> list:
             f"&select=id,chapter_id,title,title_bn,telegram_channel_id,telegram_message_id,source_type,drive_file_id,youtube_video_id,size_mb,duration,display_order"
             f"&offset={offset}&limit=1000"
         )
-        r = await client.get(url, headers=headers, timeout=30)
-        r.raise_for_status()
-        batch = r.json()
+        for attempt in range(3):
+            try:
+                r = await client.get(url, headers=headers, timeout=30)
+                r.raise_for_status()
+                batch = r.json()
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 ** attempt)
+        
         if not batch:
             break
         all_videos.extend(batch)
@@ -349,55 +381,61 @@ async def refresh_catalog():
 
 
 # ─── LIFESPAN ─────────────────────────────────────────────────
+ensure_tg_lock = asyncio.Lock()
+
 async def ensure_telegram_connected() -> bool:
     global tg, tg2, _tg_check_ts, _tg_check_ok
     now = time.time()
-    # Use cached result if checked recently and it was good
+    
     if _tg_check_ok and (now - _tg_check_ts) < 20:
         return True
-    
-    # Check primary client
-    if tg is not None:
-        try:
-            if tg.is_connected:
-                _tg_check_ok = True
-                _tg_check_ts = now
-                return True
-        except Exception:
-            pass
+        
+    async with ensure_tg_lock:
+        if _tg_check_ok and (time.time() - _tg_check_ts) < 20:
+            return True
             
-    # Check secondary client
-    if tg2 is not None:
-        try:
-            if tg2.is_connected:
-                print("[NexusEdu] Primary down, secondary client is connected.", flush=True)
-                _tg_check_ok = True
-                _tg_check_ts = now
-                return True
-        except Exception:
-            pass
-            
-    # Need to reconnect primary
-    print("[NexusEdu] Telegram disconnected — reconnecting...", flush=True)
-    try:
+        # Check primary client
         if tg is not None:
             try:
-                await asyncio.wait_for(tg.stop(), timeout=5)
+                if tg.is_connected:
+                    _tg_check_ok = True
+                    _tg_check_ts = time.time()
+                    return True
             except Exception:
                 pass
-        if API_ID and API_HASH and SESSION_STRING:
-            tg = Client("nexusedu_session", api_id=API_ID, api_hash=API_HASH,
-                        session_string=SESSION_STRING, in_memory=True)
-            await asyncio.wait_for(tg.start(), timeout=30)
-            print("[NexusEdu] Primary Telegram reconnected.", flush=True)
-            asyncio.create_task(preload_channels())
-            _tg_check_ok = True
-            _tg_check_ts = now
-            return True
-    except Exception as e:
-        print(f"[NexusEdu] Primary reconnect failed: {e}", flush=True)
-    # Try secondary as fallback
-    if SESSION_STRING_2:
+                
+        # Check secondary client
+        if tg2 is not None:
+            try:
+                if tg2.is_connected:
+                    print("[System] Primary down, secondary client is connected.", flush=True)
+                    _tg_check_ok = True
+                    _tg_check_ts = time.time()
+                    return True
+            except Exception:
+                pass
+                
+        # Need to reconnect primary
+        print("[System] Telegram disconnected — reconnecting...", flush=True)
+        try:
+            if tg is not None:
+                try:
+                    await asyncio.wait_for(tg.stop(), timeout=5)
+                except Exception:
+                    pass
+            if API_ID and API_HASH and SESSION_STRING:
+                tg = Client("nexusedu_session", api_id=API_ID, api_hash=API_HASH,
+                            session_string=SESSION_STRING, in_memory=True)
+                await asyncio.wait_for(tg.start(), timeout=30)
+                print("[System] Primary Telegram reconnected.", flush=True)
+                asyncio.create_task(preload_channels())
+                _tg_check_ok = True
+                _tg_check_ts = time.time()
+                return True
+        except Exception as e:
+            print(f"[System] Primary reconnect failed: {e}", flush=True)
+        # Try secondary as fallback
+        if SESSION_STRING_2:
         try:
             if tg2 is not None:
                 try:
@@ -427,8 +465,8 @@ async def telegram_watchdog():
         except Exception as e:
             fail_count += 1
             fail_count = min(fail_count, 10)
-            wait = min(60 * (2 ** (fail_count - 1)), 900)
-            print(f"[watchdog] fail #{fail_count}, retry in {wait}s: {e}")
+            wait = min(60 * (2 ** (fail_count - 1)), 120)
+            print(f"[System] watchdog: fail #{fail_count}, retry in {wait}s: {e}")
             await asyncio.sleep(wait)
 
 @asynccontextmanager
@@ -618,7 +656,7 @@ async def force_refresh():
     return {"status": "refreshed", "videos": len(video_map)}
 
 
-@app.get("/api/warmup")
+@app.api_route("/api/warmup", methods=["GET", "POST"])
 async def warmup():
     """
     Called by frontend on app startup.
@@ -668,9 +706,6 @@ async def prefetch_video(video_id: str):
         return {"status": "message_empty", "cached": False}
     except Exception as e:
         return {"status": "error", "cached": False, "error": str(e)}
-
-
-CHUNK_SIZE = 1048576
 
 async def _stream_telegram(
     channel_id: int, message_id: int,

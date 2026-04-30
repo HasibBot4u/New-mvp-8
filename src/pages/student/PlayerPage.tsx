@@ -35,10 +35,8 @@ export default function PlayerPage() {
   const nav = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const noteSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [errored, setErrored] = useState(false);
-  const [countdown, setCountdown] = useState(30);
   const [notes, setNotes] = useState("");
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
@@ -47,11 +45,27 @@ export default function PlayerPage() {
   const [duration, setDuration] = useState(0);
 
   const { video, chapter } = useMemo(() => {
-    let v: any, c: any;
-    catalog?.subjects.forEach(s => s.cycles.forEach(cyc => cyc.chapters.forEach(ch =>
-      ch.videos.forEach(vid => { if (vid.id === videoId) { v = vid; c = ch; } })
-    )));
-    return { video: v, chapter: c };
+    let foundVideo: any = null;
+    let foundChapter: any = null;
+    if (catalog && videoId) {
+      for (const s of catalog.subjects) {
+        for (const cyc of s.cycles) {
+          for (const ch of cyc.chapters) {
+            for (const vid of ch.videos) {
+              if (vid.id === videoId) {
+                foundVideo = vid;
+                foundChapter = ch;
+                break;
+              }
+            }
+            if (foundVideo) break;
+          }
+          if (foundVideo) break;
+        }
+        if (foundVideo) break;
+      }
+    }
+    return { video: foundVideo, chapter: foundChapter };
   }, [catalog, videoId]);
 
   const source = video ? getVideoSource(video, sessionToken) : null;
@@ -87,12 +101,15 @@ export default function PlayerPage() {
     }
   }, [source?.type]);
 
+  const fetchedProgress = useRef(0);
+
   // Load existing watch progress + notes
   useEffect(() => {
     if (!user || !video) return;
     
     loadProgressFromSupabase().then((progress) => {
-      if (videoRef.current && progress > 0) {
+      fetchedProgress.current = progress;
+      if (videoRef.current && videoRef.current.readyState >= 1 && progress > 0) {
         try { videoRef.current.currentTime = progress; } catch (e) { console.error("Error setting time:", e); }
       }
     });
@@ -117,7 +134,6 @@ export default function PlayerPage() {
 
   const retryPlayback = useCallback(() => {
     setErrored(false);
-    setCountdown(30);
     if (videoRef.current) {
       try { videoRef.current.load(); videoRef.current.play().catch(() => {}); } catch (e) { console.error("Retry playback error:", e); }
     }
@@ -125,23 +141,38 @@ export default function PlayerPage() {
 
   const handleVideoError = useCallback(() => {
     setErrored(true);
-    setCountdown(30);
   }, []);
 
-  // Auto-retry countdown for telegram errors
   useEffect(() => {
-    if (!errored) {
-      if (retryTimer.current) clearInterval(retryTimer.current);
-      return;
-    }
-    retryTimer.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { retryPlayback(); return 30; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => { if (retryTimer.current) clearInterval(retryTimer.current); };
-  }, [errored, retryPlayback]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in notes textarea
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      if (!videoRef.current) return;
+      
+      const v = videoRef.current;
+      if (e.key === ' ' || e.key === 'k') {
+        e.preventDefault();
+        v.paused ? v.play() : v.pause();
+      } else if (e.key === 'ArrowRight' || e.key === 'l') {
+        e.preventDefault();
+        v.currentTime += 5;
+      } else if (e.key === 'ArrowLeft' || e.key === 'j') {
+        e.preventDefault();
+        v.currentTime -= 5;
+      } else if (e.key === 'f') {
+        e.preventDefault();
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          v.requestFullscreen().catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Removed auto retry countdown as per F13
 
   // Notes auto-save (2s after typing pause)
   const onNotesChange = (val: string) => {
@@ -164,7 +195,6 @@ export default function PlayerPage() {
   useEffect(() => {
     return () => {
       if (noteSaveTimeout.current) clearTimeout(noteSaveTimeout.current);
-      if (retryTimer.current) clearInterval(retryTimer.current);
     };
   }, []);
 
@@ -203,10 +233,7 @@ export default function PlayerPage() {
                 <p className="font-bangla text-foreground mb-3">
                   ভিডিও লোড হচ্ছে না। ব্যাকএন্ড সার্ভার চালু হতে কিছু সময় লাগছে।
                 </p>
-                <p className="font-bangla text-sm text-foreground-muted mb-5">
-                  {countdown} সেকেন্ড পরে আবার চেষ্টা করা হবে...
-                </p>
-                <Button onClick={retryPlayback} className="rounded-full bg-primary hover:bg-primary-glow shadow-glow">
+                <Button onClick={retryPlayback} className="rounded-full bg-primary hover:bg-primary-glow shadow-glow mt-2">
                   <RotateCw className="w-4 h-4 mr-2" /> আবার চেষ্টা করুন
                 </Button>
               </div>
@@ -219,7 +246,12 @@ export default function PlayerPage() {
               autoPlay
               preload="auto"
               className="w-full h-full"
-              onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
+              onLoadedMetadata={() => {
+                setDuration(videoRef.current?.duration || 0);
+                if (fetchedProgress.current > 0 && videoRef.current) {
+                  try { videoRef.current.currentTime = fetchedProgress.current; } catch (e) { console.error("Could not seek to resume position", e); }
+                }
+              }}
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleVideoEnded}
               onError={handleVideoError}
@@ -227,10 +259,31 @@ export default function PlayerPage() {
           )}
         </div>
 
-        <div className="mt-6">
-          <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">{video.title}</h1>
-          {video.title_bn && <p className="font-bangla text-foreground-dim mt-1">{video.title_bn}</p>}
-          {video.description && <p className="text-foreground-dim mt-4 max-w-3xl">{video.description}</p>}
+        <div className="mt-6 flex items-start justify-between">
+          <div>
+            <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight">{video.title}</h1>
+            {video.title_bn && <p className="font-bangla text-foreground-dim mt-1">{video.title_bn}</p>}
+            {video.description && <p className="text-foreground-dim mt-4 max-w-3xl">{video.description}</p>}
+          </div>
+          {source.type !== 'youtube' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-foreground-muted font-medium">Speed:</span>
+              <select 
+                className="bg-surface border border-border rounded-lg text-sm px-2 py-1 focus:outline-none focus:border-primary"
+                onChange={(e) => {
+                  if (videoRef.current) videoRef.current.playbackRate = parseFloat(e.target.value);
+                }}
+                defaultValue="1"
+              >
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1">1x (Normal)</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Notes panel */}

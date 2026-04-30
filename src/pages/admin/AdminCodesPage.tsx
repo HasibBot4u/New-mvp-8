@@ -3,13 +3,50 @@ import { Loader2, Plus, Trash2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { EnrollmentCode, Chapter } from "@/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const sb = supabase as any;
+const sb = supabase;
+
+function CodeModal({ isOpen, onClose, onSave, chapters }: any) {
+  const [chapterId, setChapterId] = useState("");
+  const [maxUses, setMaxUses] = useState("1");
+  const required = chapters.filter((c: any) => c.requires_enrollment);
+
+  const handleSubmit = (e: any) => {
+    e.preventDefault();
+    if (!chapterId) return;
+    onSave({ chapterId, maxUses: parseInt(maxUses) || 1 });
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Generate Code</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Chapter</Label>
+            <select required value={chapterId} onChange={e => setChapterId(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+              <option value="">Select a chapter...</option>
+              {required.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div><Label>Max Uses</Label><Input type="number" required min="1" value={maxUses} onChange={e => setMaxUses(e.target.value)} /></div>
+          <DialogFooter><Button type="submit">Generate</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function AdminCodesPage() {
   const [codes, setCodes] = useState<EnrollmentCode[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
   const { toast } = useToast();
 
   const load = async () => {
@@ -24,15 +61,9 @@ export default function AdminCodesPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const generate = async () => {
-    const required = chapters.filter(c => c.requires_enrollment);
-    if (required.length === 0) { toast({ title: "No locked chapters", description: "Mark a chapter as locked first.", variant: "destructive" }); return; }
-    const list = required.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-    const idx = parseInt(prompt(`Pick chapter:\n${list}`, "1") || "0", 10);
-    const chapter = required[idx - 1]; if (!chapter) return;
-    const max = parseInt(prompt("Max uses?", "1") || "1", 10);
+  const handleGenerate = async ({ chapterId, maxUses }: any) => {
     const code = `NEX-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    const { error } = await sb.from("enrollment_codes").insert({ code, chapter_id: chapter.id, max_uses: max, is_active: true });
+    const { error } = await sb.from("enrollment_codes").insert({ code, chapter_id: chapterId, max_uses: maxUses, is_active: true });
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
     else { toast({ title: "Code generated", description: code }); load(); }
   };
@@ -45,6 +76,9 @@ export default function AdminCodesPage() {
   const copy = (code: string) => { navigator.clipboard.writeText(code); toast({ title: "Copied" }); };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  
+  const hasLocked = chapters.some(c => c.requires_enrollment);
+
   return (
     <div className="space-y-6">
       <header className="flex items-end justify-between flex-wrap gap-4">
@@ -52,7 +86,7 @@ export default function AdminCodesPage() {
           <h1 className="font-display text-3xl font-bold">Enrollment codes</h1>
           <p className="text-foreground-dim text-sm mt-1">Grant chapter access without payment.</p>
         </div>
-        <button onClick={generate} className="inline-flex items-center gap-2 px-4 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary-glow text-sm font-medium">
+        <button onClick={() => hasLocked ? setShowModal(true) : toast({ title: "No locked chapters", variant: "destructive" })} className="inline-flex items-center gap-2 px-4 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary-glow text-sm font-medium">
           <Plus className="w-4 h-4" /> New code
         </button>
       </header>
@@ -89,6 +123,7 @@ export default function AdminCodesPage() {
           </table>
         </div>
       </div>
+      {showModal && <CodeModal isOpen={showModal} onClose={() => setShowModal(false)} onSave={handleGenerate} chapters={chapters} />}
     </div>
   );
 }

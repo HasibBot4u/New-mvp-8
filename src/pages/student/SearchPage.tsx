@@ -15,7 +15,7 @@ interface Hit {
 }
 
 export default function SearchPage() {
-  const { catalog } = useCatalog();
+  const { catalog, isLoading } = useCatalog();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
 
@@ -78,7 +78,13 @@ export default function SearchPage() {
         <p className="text-xs text-foreground-muted font-bangla">{totalCount} টি ফলাফল</p>
       )}
 
-      {hasQuery && totalCount === 0 ? (
+      {isLoading && (
+        <div className="rounded-2xl p-12 bg-background-elevated border border-border text-center">
+          <p className="font-bangla text-foreground-dim">ক্যাটালগ লোড হচ্ছে...</p>
+        </div>
+      )}
+
+      {!isLoading && hasQuery && totalCount === 0 ? (
         <div className="rounded-2xl p-12 bg-background-elevated border border-border text-center">
           <p className="font-bangla text-foreground-dim">কোনো ফলাফল পাওয়া যায়নি</p>
         </div>

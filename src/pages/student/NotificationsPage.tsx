@@ -17,7 +17,10 @@ export default function NotificationsPage() {
     const { data } = await sb.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     setItems((data ?? []) as unknown as Notification[]);
   };
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { 
+    load(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const markAll = async () => {
     if (!user) return;

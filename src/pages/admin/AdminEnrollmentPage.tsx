@@ -13,7 +13,7 @@ interface CodeRow {
 }
 interface ChapterOpt { id: string; name: string; cycle_id: string; }
 
-const sb = supabase as any;
+const sb = supabase;
 
 function formatCode(raw: string): string {
   // Group into 4-char blocks
@@ -44,8 +44,8 @@ export default function AdminEnrollmentPage() {
       sb.from("enrollment_codes").select("*, chapters(name, cycles(subjects(name)))").order("generated_at", { ascending: false }),
       sb.from("chapters").select("id, name, cycle_id").eq("is_active", true).order("display_order"),
     ]);
-    setRows((c.data ?? []) as CodeRow[]);
-    setChapters((ch.data ?? []) as ChapterOpt[]);
+    setRows((c.data ?? []) as unknown as CodeRow[]);
+    setChapters((ch.data ?? []) as unknown as ChapterOpt[]);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);

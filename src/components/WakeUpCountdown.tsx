@@ -60,7 +60,6 @@ export function WakeUpCountdown({ onReady, onGiveUp }: WakeUpCountdownProps) {
     });
 
     // First check immediately
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkHealth();
 
     // Poll every 4 seconds

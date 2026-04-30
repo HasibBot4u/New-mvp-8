@@ -58,10 +58,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     setIsLoading(true); setError(null);
     try {
       const [s, c, ch, v] = await Promise.all([
-        sb.from("subjects").select("*").eq("is_active", true).order("display_order"),
-        sb.from("cycles").select("*").eq("is_active", true).order("display_order"),
-        sb.from("chapters").select("*").eq("is_active", true).order("display_order"),
-        sb.from("videos").select("*").eq("is_active", true).order("display_order"),
+        sb.from("subjects").select("id, name, name_bn, slug, icon, color, display_order, is_active").eq("is_active", true).order("display_order"),
+        sb.from("cycles").select("id, subject_id, name, name_bn, display_order, is_active").eq("is_active", true).order("display_order"),
+        sb.from("chapters").select("id, cycle_id, name, name_bn, description, requires_enrollment, display_order, is_active").eq("is_active", true).order("display_order"),
+        sb.from("videos").select("id, chapter_id, title, title_bn, source_type, telegram_channel_id, telegram_message_id, youtube_video_id, drive_file_id, duration, size_mb, thumbnail_url, display_order, is_active").eq("is_active", true).order("display_order"),
       ]);
       if (s.error || c.error || ch.error || v.error) {
         throw s.error || c.error || ch.error || v.error;
@@ -71,19 +71,30 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       const chapters = (ch.data ?? []).map(mapChapter);
       const videos = (v.data ?? []).map(mapVideo);
 
+      const videosByChapter = new Map<string, Video[]>();
+      for (const vi of videos) {
+        const arr = videosByChapter.get(vi.chapter_id) || [];
+        arr.push(vi);
+        videosByChapter.set(vi.chapter_id, arr);
+      }
+
+      const chaptersByCycle = new Map<string, CatalogChapter[]>();
+      for (const cp of chapters) {
+        const arr = chaptersByCycle.get(cp.cycle_id) || [];
+        arr.push({ ...cp, videos: videosByChapter.get(cp.id) || [] });
+        chaptersByCycle.set(cp.cycle_id, arr);
+      }
+
+      const cyclesBySubject = new Map<string, CatalogCycle[]>();
+      for (const cy of cycles) {
+        const arr = cyclesBySubject.get(cy.subject_id) || [];
+        arr.push({ ...cy, chapters: chaptersByCycle.get(cy.id) || [] });
+        cyclesBySubject.set(cy.subject_id, arr);
+      }
+
       const built: CatalogSubject[] = subjects.map((subj: Subject) => ({
         ...subj,
-        cycles: cycles
-          .filter((cy: Cycle) => cy.subject_id === subj.id)
-          .map((cy: Cycle) => ({
-            ...cy,
-            chapters: chapters
-              .filter((cp: Chapter) => cp.cycle_id === cy.id)
-              .map((cp: Chapter) => ({
-                ...cp,
-                videos: videos.filter((vi: Video) => vi.chapter_id === cp.id),
-              })),
-          })),
+        cycles: cyclesBySubject.get(subj.id) || []
       }));
       setCatalog({ subjects: built, totalVideos: videos.length });
     } catch (e: any) {

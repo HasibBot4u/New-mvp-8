@@ -14,7 +14,7 @@ interface UserRow {
 }
 
 const PAGE_SIZE = 20;
-const sb = supabase as any;
+const sb = supabase;
 
 export default function AdminUsersPage() {
   const [rows, setRows] = useState<UserRow[]>([]);
@@ -41,7 +41,10 @@ export default function AdminUsersPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, q]);
+  useEffect(() => { 
+    load(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, q]);
 
   const toggleBlock = async (r: UserRow) => {
     await sb.from("profiles").update({ is_blocked: !r.is_blocked }).eq("id", r.id);
@@ -50,10 +53,10 @@ export default function AdminUsersPage() {
   };
   const toggleAdmin = async (r: UserRow) => {
     if (r.isAdmin) {
-      await sb.from("profiles").update({ role: "student" }).eq("id", r.id);
+      await sb.from("profiles").update({ role: "student" } as any).eq("id", r.id);
       toast({ title: "Admin removed" });
     } else {
-      await sb.from("profiles").update({ role: "admin" }).eq("id", r.id);
+      await sb.from("profiles").update({ role: "admin" } as any).eq("id", r.id);
       toast({ title: "Admin granted" });
     }
     load();

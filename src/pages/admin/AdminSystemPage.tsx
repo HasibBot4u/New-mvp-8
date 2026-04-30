@@ -20,7 +20,7 @@ export default function AdminSystemPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await (supabase as any).from("system_settings").select("key, value");
+      const { data } = await supabase.from("system_settings").select("key, value");
       const map: Record<string, any> = {};
       for (const r of data ?? []) map[r.key] = r.value;
       if (map.maintenance_mode) setMaintenance(!!map.maintenance_mode.enabled);
@@ -35,7 +35,7 @@ export default function AdminSystemPage() {
   }, []);
 
   const upsert = async (key: string, value: any) => {
-    const { error } = await (supabase as any).from("system_settings")
+    const { error } = await supabase.from("system_settings")
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
     if (error) toast({ title: "ব্যর্থ", description: error.message, variant: "destructive" });
     else { toast({ title: "সংরক্ষিত হয়েছে" }); refreshSettings(); }

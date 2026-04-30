@@ -59,14 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        setTimeout(async () => {
+        (async () => {
           const p = await fetchProfile(s.user);
           setProfile(p);
           if (p?.is_blocked) {
             await supabase.auth.signOut();
             setProfile(null);
           }
-        }, 0);
+        })();
       } else {
         setProfile(null);
       }

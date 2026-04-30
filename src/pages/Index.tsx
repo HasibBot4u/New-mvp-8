@@ -1,9 +1,12 @@
+import { lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Play, Atom, Sparkles, ShieldCheck, Smartphone, Users } from "lucide-react";
-import { HeroCanvas } from "@/components/three/HeroCanvas";
+// import { HeroCanvas } from "@/components/three/HeroCanvas";
 import { Button } from "@/components/ui/button";
 import { useCatalog } from "@/contexts/CatalogContext";
+
+const HeroCanvas = lazy(() => import("@/components/three/HeroCanvas").then(m => ({ default: m.HeroCanvas })));
 
 const features = [
   { icon: Sparkles, title: "Curated cycles", desc: "Lessons grouped into focused cycles & chapters — no overwhelm." },
@@ -22,7 +25,9 @@ const Index = () => {
       <section className="relative min-h-screen flex items-center pt-24">
         <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
         <div className="absolute inset-0">
-          <HeroCanvas />
+          <Suspense fallback={null}>
+            <HeroCanvas />
+          </Suspense>
         </div>
         {/* fade scene into page */}
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-fade-bottom pointer-events-none" />

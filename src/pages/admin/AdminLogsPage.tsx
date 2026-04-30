@@ -31,16 +31,19 @@ export default function AdminLogsPage() {
   const load = async () => {
     setLoading(true);
     const since = new Date(Date.now() - days * 86400000).toISOString();
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("activity_logs")
       .select("*, profiles(display_name, email)")
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(200);
-    setRows((data ?? []) as LogRow[]);
+    setRows((data ?? []) as unknown as LogRow[]);
     setLoading(false);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [days]);
+  useEffect(() => { 
+    load(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   const filtered = useMemo(() => rows.filter(r => {
     if (actionFilter !== "all" && r.action !== actionFilter) return false;

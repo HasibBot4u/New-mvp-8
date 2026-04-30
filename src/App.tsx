@@ -31,6 +31,7 @@ import SuccessStoriesPage from "./pages/public/SuccessStoriesPage";
 
 import DashboardPage from "./pages/student/DashboardPage";
 import SubjectPage from "./pages/student/SubjectPage";
+import CoursesPage from "./pages/student/CoursesPage";
 import ChaptersPage from "./pages/student/ChaptersPage";
 import VideoListPage from "./pages/student/VideoListPage";
 import PlayerPage from "./pages/student/PlayerPage";
@@ -52,7 +53,14 @@ import AdminLogsPage from "./pages/admin/AdminLogsPage";
 import AdminSystemPage from "./pages/admin/AdminSystemPage";
 import AdminEnrollmentPage from "./pages/admin/AdminEnrollmentPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <SystemSettingsProvider>
@@ -85,6 +93,7 @@ const App = () => (
                 {/* Student app */}
                 <Route element={<ProtectedRoute><StudentLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/courses" element={<CoursesPage />} />
                   <Route path="/subject/:subjectSlug" element={<SubjectPage />} />
                   <Route path="/cycle/:cycleId" element={<ChaptersPage />} />
                   <Route path="/chapter/:chapterId" element={<VideoListPage />} />

@@ -45,11 +45,14 @@ export function useBackendHealth(autoRefreshSeconds = 30) {
       // Handle BOTH response formats from the backend:
       // Format A: { status: 'ok', telegram: 'connected', catalog_size: 5 }
       // Format B: { telegram_connected: true, videos_loaded: 5, uptime: '2h' }
-      const telegramConnected =
+      const tgStr = String(data.telegram || data.telegram_connected || '').toLowerCase();
+      const isReconnecting = tgStr.includes('reconnect');
+      const telegramConnected = !isReconnecting && (
         data.telegram === 'connected' ||
         data.telegram_connected === true ||
         data.telegram?.status === 'connected' ||
-        String(data.telegram).toLowerCase().includes('connect');
+        tgStr.includes('connect')
+      );
 
       const videosLoaded =
         data.catalog_size ??
